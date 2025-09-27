@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "research-assistant": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\paul-\\Documents\\columnist-db\\mcp-server\\standalone-server.js"
+      ]
+    }
+  }
+}
