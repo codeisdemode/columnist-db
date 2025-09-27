@@ -258,6 +258,7 @@ console.log('Sync status:', status);
 
 ## 📁 Project Structure
 
+```
 columnist-db/
 ├── packages/              # Modular packages (shadcn/ui style)
 │   ├── core/             # Main database engine (columnist-db-core)
@@ -275,6 +276,7 @@ columnist-db/
 ├── __tests__/            # Comprehensive test suite
 ├── docs/                 # API documentation and examples
 └── showcase/             # Additional demo applications
+```
 
 ### UI Framework
 
