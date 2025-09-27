@@ -18,32 +18,18 @@ A production-ready client-side database with IndexedDB persistence, full-text se
 - **Offline-First**: Robust change tracking with automatic retry and exponential backoff
 - **Device Management**: Presence tracking, capability detection, and online status awareness
 
-### Research Assistant Demo
-- **Modern Web App**: Next.js 15, React 19, TypeScript, Tailwind CSS
+### AI & Integration Features
+- **MCP Server**: AI assistant integration for persistent memory systems
+- **React Hooks**: Seamless integration with modern React applications
+- **Modular Architecture**: Component-based installation (shadcn/ui style)
+
+### Research Assistant Demo (Example Application)
+A showcase application demonstrating columnist-db capabilities:
 - **Paper Management**: Add, search, and organize research papers
 - **Note-Taking System**: Research notes linked to papers
-- **AI Integration**: MCP server with 10 research tools for AI assistants
-- **Real-time Search**: Instant search with relevance ranking
+- **AI Integration**: MCP server with research tools for AI assistants
 
 ## 🛠️ Quick Start
-
-### Try the Research Assistant Demo
-
-1. **Clone the repository**
-```bash
-git clone https://github.com/codeisdemode/columnist-db.git
-cd columnist-db/app
-
-2. **Install dependencies and run**
-```bash
-npm install
-npm run dev
-
-3. **Open [http://localhost:3000](http://localhost:3000)** and explore:
-   - Add sample papers using the "Add Sample Paper" button
-   - Search for papers using the search bar
-   - Add notes to papers using "Add Sample Note"
-   - Switch between different tabs to explore features
 
 ### Component-Based Installation (shadcn/ui style)
 
@@ -74,7 +60,7 @@ await db.insert('users', { name: 'John', email: 'john@example.com' });
 const users = await db.search('users', 'John');
 ```
 
-#### Install React Hooks Integration
+#### Install React Hooks (Optional)
 ```bash
 npm install columnist-db-hooks
 ```
@@ -99,20 +85,47 @@ import { ColumnistDB } from 'columnist-db';
 // Includes core + hooks + plugins
 ```
 
+### Example: Research Assistant Demo
+
+To see columnist-db in action, try the Research Assistant demo application:
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/codeisdemode/columnist-db.git
+cd columnist-db/app
+```
+
+2. **Install dependencies and run**
+```bash
+npm install
+npm run dev
+```
+
+3. **Open [http://localhost:3000](http://localhost:3000)** and explore:
+   - Add sample papers using the "Add Sample Paper" button
+   - Search for papers using the search bar
+   - Add notes to papers using "Add Sample Note"
+   - Switch between different tabs to explore features
+
 ## 🚀 Features
 
-### Research Assistant Web Application
-- **Full-Text Search**: Search research papers by title, abstract, authors, or tags
-- **Semantic Search**: Vector embeddings for intelligent content discovery
-- **Paper Management**: Add, view, and organize research papers
-- **Note-Taking**: Add research notes linked to papers
-- **Modern UI**: Built with Next.js 15, React 19, and Tailwind CSS
+### Core Database Engine
+- **Client-Side Storage**: IndexedDB persistence with offline capabilities
+- **Full-Text Search**: TF-IDF based relevance scoring with inverted indexes
+- **Vector Search**: Semantic search with embeddings support
+- **Schema Validation**: Zod integration for type-safe data operations
+- **Multi-Device Sync**: Enterprise-grade synchronization with conflict resolution
 
-### MCP Server Integration
-- **AI Memory System**: MCP server for AI assistants (Claude Code, ChatGPT)
-- **10 Research Tools**: Paper management, search, analysis, and export capabilities
-- **Persistent Storage**: Client-side database with IndexedDB persistence
-- **Cross-Platform**: Works on desktop and mobile devices
+### AI & Integration Features
+- **MCP Server**: AI assistant integration for persistent memory systems
+- **React Hooks**: Seamless integration with modern React applications
+- **Modular Architecture**: Component-based installation (shadcn/ui style)
+
+### Example: Research Assistant Demo
+A showcase application demonstrating columnist-db capabilities:
+- **Paper Management**: Add, search, and organize research papers
+- **Note-Taking System**: Research notes linked to papers
+- **AI Integration**: MCP server with research tools for AI assistants
 
 ## 📋 Prerequisites
 
@@ -137,6 +150,7 @@ Add to your Claude Code configuration:
     }
   }
 }
+```
 
 ### Available MCP Tools
 - `add_research_paper` - Add new research papers
@@ -204,6 +218,7 @@ console.log('Sync status:', status);
   tags: string;         // Comma-separated tags
   vectorEmbedding: number[]; // Semantic embeddings
 }
+```
 
 ### Notes Table
 ```typescript
@@ -213,6 +228,7 @@ console.log('Sync status:', status);
   tags: string[];       // Array of tags
   paperId?: string;     // Optional paper reference
 }
+```
 
 ## 🎯 Use Cases
 
@@ -283,6 +299,7 @@ npm test
 
 # Build the library
 npm run build
+```
 
 ### Research Assistant Demo
 ```bash
@@ -300,6 +317,7 @@ npm run build
 
 # Start production server
 npm start
+```
 
 ### MCP Server Setup
 ```bash
@@ -311,6 +329,7 @@ npm install
 
 # Test the server
 node standalone-server.js
+```
 
 ## 🤝 Contributing
 
