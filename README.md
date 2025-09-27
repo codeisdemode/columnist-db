@@ -9,7 +9,14 @@ A production-ready client-side database with IndexedDB persistence, full-text se
 - **Full-Text Search**: TF-IDF based relevance scoring with inverted indexes
 - **Vector Search**: Semantic search with embeddings support
 - **Schema Validation**: Zod integration for type-safe data operations
-- **Sync Capabilities**: Multi-device synchronization adapters
+- **⚡ Enterprise-Grade Sync**: Multi-device synchronization with real-time conflict resolution
+
+### 🔄 Advanced Sync Capabilities
+- **Multi-Device Synchronization**: Real-time sync across devices with device fingerprinting
+- **Conflict Resolution**: Smart strategies (local/remote wins, merge, device-aware, custom)
+- **Backend Adapters**: Firebase, Supabase, REST API with real-time listeners
+- **Offline-First**: Robust change tracking with automatic retry and exponential backoff
+- **Device Management**: Presence tracking, capability detection, and online status awareness
 
 ### Research Assistant Demo
 - **Modern Web App**: Next.js 15, React 19, TypeScript, Tailwind CSS
@@ -26,13 +33,11 @@ A production-ready client-side database with IndexedDB persistence, full-text se
 ```bash
 git clone https://github.com/codeisdemode/columnist-db.git
 cd columnist-db/app
-```
 
 2. **Install dependencies and run**
 ```bash
 npm install
 npm run dev
-```
 
 3. **Open [http://localhost:3000](http://localhost:3000)** and explore:
    - Add sample papers using the "Add Sample Paper" button
@@ -40,9 +45,17 @@ npm run dev
    - Add notes to papers using "Add Sample Note"
    - Switch between different tabs to explore features
 
-### Use the Core Library
+### Component-Based Installation (shadcn/ui style)
+
+Columnist-DB supports modular installation similar to shadcn/ui, allowing you to install only the components you need:
+
+#### Install Core Database Only
+```bash
+npm install columnist-db-core
+```
+
 ```typescript
-import { ColumnistDB } from 'columnist-db';
+import { ColumnistDB } from 'columnist-db-core';
 
 // Define your schema
 const schema = {
@@ -59,6 +72,31 @@ const db = new ColumnistDB({ schema });
 // Use the database
 await db.insert('users', { name: 'John', email: 'john@example.com' });
 const users = await db.search('users', 'John');
+```
+
+#### Install React Hooks Integration
+```bash
+npm install columnist-db-hooks
+```
+
+```typescript
+import { useColumnistDB } from 'columnist-db-hooks';
+
+// Use in React components
+function MyComponent() {
+  const { db, isLoading, error } = useColumnistDB({ schema });
+  // ...
+}
+```
+
+#### Install Full Package (All Components)
+```bash
+npm install columnist-db
+```
+
+```typescript
+import { ColumnistDB } from 'columnist-db';
+// Includes core + hooks + plugins
 ```
 
 ## 🚀 Features
@@ -99,7 +137,6 @@ Add to your Claude Code configuration:
     }
   }
 }
-```
 
 ### Available MCP Tools
 - `add_research_paper` - Add new research papers
@@ -107,9 +144,42 @@ Add to your Claude Code configuration:
 - `get_research_summary` - Get analytics on your research collection
 - `export_research_data` - Export to JSON, CSV, or BibTeX
 
+## 🔄 Multi-Device Sync Setup
+
+Columnist-DB provides enterprise-grade synchronization for multi-device applications:
+
+### Firebase Sync Example
+```typescript
+import { Columnist } from 'columnist-db-core';
+
+const db = await Columnist.init('my-app', { schema });
+
+// Register Firebase sync adapter
+await db.registerSyncAdapter('firebase', 'firebase', {
+  apiKey: 'your-api-key',
+  authDomain: 'your-project.firebaseapp.com',
+  projectId: 'your-project-id',
+  realtime: true, // Enable real-time sync
+  conflictStrategy: 'device-aware' // Smart conflict resolution
+});
+
+// Start synchronization
+await db.startSync('firebase');
+
+// Monitor sync status
+const status = db.getSyncStatus('firebase');
+console.log('Sync status:', status);
+```
+
+### Advanced Sync Features
+- **Real-time Conflict Resolution**: Device-aware strategies with automatic merging
+- **Offline-First Design**: Changes tracked locally and synced when online
+- **Multiple Backend Support**: Firebase, Supabase, REST API adapters
+- **Device Management**: Automatic device fingerprinting and presence tracking
+- **Performance Optimized**: Batched operations with exponential backoff
+
 ## 🏗️ Architecture
 
-```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Next.js App   │◄──►│  columnist-db    │◄──►│   IndexedDB     │
 │  (React 19)     │    │     Core         │    │   (Browser)     │
@@ -120,7 +190,6 @@ Add to your Claude Code configuration:
 │   MCP Server    │◄──►│   AI Assistants  │    │   Vector Search │
 │  (Claude Code)  │    │   (ChatGPT)      │    │   (Embeddings)  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
-```
 
 ## 📊 Database Schema
 
@@ -135,7 +204,6 @@ Add to your Claude Code configuration:
   tags: string;         // Comma-separated tags
   vectorEmbedding: number[]; // Semantic embeddings
 }
-```
 
 ### Notes Table
 ```typescript
@@ -145,7 +213,6 @@ Add to your Claude Code configuration:
   tags: string[];       // Array of tags
   paperId?: string;     // Optional paper reference
 }
-```
 
 ## 🎯 Use Cases
 
@@ -175,14 +242,13 @@ Add to your Claude Code configuration:
 
 ## 📁 Project Structure
 
-```
 columnist-db/
-├── packages/              # Core library packages
-│   ├── core/             # Main database engine
-│   ├── hooks/            # React hooks integration
+├── packages/              # Modular packages (shadcn/ui style)
+│   ├── core/             # Main database engine (columnist-db-core)
+│   ├── hooks/            # React hooks integration (columnist-db-hooks)
 │   └── plugins/          # Sync and embedding plugins
-├── app/                  # Next.js demo application
-│   ├── api/              # API routes
+├── src/                  # Research Assistant demo app
+│   ├── app/              # Next.js app router pages
 │   ├── components/       # UI components
 │   ├── docs/             # Documentation pages
 │   └── page.tsx          # Main application
@@ -193,6 +259,16 @@ columnist-db/
 ├── __tests__/            # Comprehensive test suite
 ├── docs/                 # API documentation and examples
 └── showcase/             # Additional demo applications
+
+### UI Framework
+
+The Research Assistant demo uses **Tailwind CSS** for styling with basic HTML components. The project includes a `components.json` configuration file for potential shadcn/ui integration, but no shadcn/ui components are currently installed or used.
+
+**To enhance the UI with shadcn/ui components (optional):**
+```bash
+# Install shadcn/ui
+npx shadcn@latest init
+npx shadcn@latest add button card input
 ```
 
 ## 🚦 Development
@@ -207,7 +283,6 @@ npm test
 
 # Build the library
 npm run build
-```
 
 ### Research Assistant Demo
 ```bash
@@ -225,7 +300,6 @@ npm run build
 
 # Start production server
 npm start
-```
 
 ### MCP Server Setup
 ```bash
@@ -237,7 +311,6 @@ npm install
 
 # Test the server
 node standalone-server.js
-```
 
 ## 🤝 Contributing
 
