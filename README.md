@@ -117,9 +117,12 @@ npm run dev
 - **Multi-Device Sync**: Enterprise-grade synchronization with conflict resolution
 
 ### AI & Integration Features
-- **MCP Server**: AI assistant integration for persistent memory systems
+- **Dual MCP Servers**:
+  - **Research Assistant MCP**: Specialized research paper management (showcase)
+  - **AI Memory MCP**: Universal content storage for AI memory function (production)
 - **React Hooks**: Seamless integration with modern React applications
 - **Modular Architecture**: Component-based installation (shadcn/ui style)
+- **Advanced RAG Platform**: Hybrid search with semantic capabilities
 
 ### Example: Research Assistant Demo
 A showcase application demonstrating columnist-db capabilities:
@@ -134,10 +137,12 @@ A showcase application demonstrating columnist-db capabilities:
 
 ## 🤖 MCP Server Setup
 
-The MCP server enables AI assistants to use columnist-db as persistent memory:
+Columnist-DB provides two specialized MCP servers for different use cases:
 
-### For Claude Code
-Add to your Claude Code configuration:
+### Research Assistant MCP (Showcase)
+Specialized for academic research paper management:
+
+**For Claude Code Configuration:**
 ```json
 {
   "mcpServers": {
@@ -152,11 +157,36 @@ Add to your Claude Code configuration:
 }
 ```
 
-### Available MCP Tools
+**Available Tools:**
 - `add_research_paper` - Add new research papers
 - `search_papers` - Search with full-text and semantic capabilities
 - `get_research_summary` - Get analytics on your research collection
 - `export_research_data` - Export to JSON, CSV, or BibTeX
+
+### AI Memory MCP (Production)
+Universal content storage for AI memory function:
+
+**For Claude Code Configuration:**
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "node",
+      "args": ["./mcp-server-ai-memory/index.js"],
+      "env": {
+        "DB_NAME": "ai-memory"
+      }
+    }
+  }
+}
+```
+
+**Available Tools:**
+- `store_content` - Store any content type (conversations, documents, web, notes)
+- `search_memory` - Search across all stored content
+- `store_conversation` - Save AI conversation history
+- `get_memory_stats` - Get memory usage statistics
+- `find_related_content` - Discover semantically related content
 
 ## 🔄 Multi-Device Sync Setup
 
@@ -269,10 +299,14 @@ columnist-db/
 │   ├── components/       # UI components
 │   ├── docs/             # Documentation pages
 │   └── page.tsx          # Main application
-├── mcp-server/           # MCP server for AI integration
+├── mcp-server/           # Research Assistant MCP (showcase)
 │   ├── standalone-server.js
 │   ├── package.json
 │   └── configuration files
+├── mcp-server-ai-memory/ # AI Memory MCP (production)
+│   ├── index.js
+│   ├── package.json
+│   └── README.md
 ├── __tests__/            # Comprehensive test suite
 ├── docs/                 # API documentation and examples
 └── showcase/             # Additional demo applications
@@ -322,6 +356,8 @@ npm start
 ```
 
 ### MCP Server Setup
+
+**Research Assistant MCP (Showcase):**
 ```bash
 # Navigate to MCP server directory
 cd mcp-server
@@ -331,6 +367,18 @@ npm install
 
 # Test the server
 node standalone-server.js
+```
+
+**AI Memory MCP (Production):**
+```bash
+# Navigate to AI Memory MCP directory
+cd mcp-server-ai-memory
+
+# Install dependencies
+npm install
+
+# Test the server
+node index.js
 ```
 
 ## 🤝 Contributing
