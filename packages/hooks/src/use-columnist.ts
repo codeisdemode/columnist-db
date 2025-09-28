@@ -63,7 +63,6 @@ export function useColumnist<Schema extends SchemaDefinition = SchemaDefinition>
         setError(null)
         
         const instance = await Columnist.init(options.name, {
-          databaseName: options.name,
           schema: options.schema,
           version: options.version
         })

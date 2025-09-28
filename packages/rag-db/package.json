@@ -1,7 +1,7 @@
 {
-  "name": "columnist-db-plugin-openai-embedding",
-  "version": "1.2.0",
-  "description": "OpenAI embedding provider plugin for ColumnistDB",
+  "name": "rag-db",
+  "version": "0.1.0",
+  "description": "Developer-first RAG database with client-side storage and AI integration",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -17,15 +17,17 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc --project tsconfig.build.json",
+    "build": "tsc --project tsconfig.json",
     "dev": "tsc --project tsconfig.json --watch",
     "clean": "rm -rf dist",
     "test": "jest"
   },
   "dependencies": {
-    "columnist-db-core": "file:../../core",
-    "columnist-db-hooks": "file:../../hooks",
-    "openai": "^4.0.0"
+    "columnist-db-core": "file:../core",
+    "columnist-db-hooks": "file:../hooks",
+    "columnist-db-plugins": "file:../plugins",
+    "openai": "^4.0.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -36,6 +38,15 @@
     "typescript": "^5.0.0"
   },
   "peerDependencies": {
-    "openai": "^4.0.0"
+    "react": ">=16.8.0",
+    "react-dom": ">=16.8.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
   }
 }
