@@ -231,12 +231,6 @@ Universal content storage for LLM context management:
 - `contextual_memory_search` - Search with contextual awareness
 - `consolidate_memories` - Optimize and consolidate memory storage
 
-### Research Assistant MCP (⚠️ DEPRECATED)
-**This MCP server has been deprecated and replaced by the unified AI Memory MCP server.**
-
-All research paper management capabilities are now available in the unified AI Memory MCP server via the `store_research_paper` tool and `search_memory` with `content_type: "research"`.
-
-**Migration:** Use the unified AI Memory MCP server configuration shown above. See `mcp-server/DEPRECATED.md` for migration details.
 
 ## 🔄 Multi-Device Sync Setup
 
@@ -419,10 +413,6 @@ columnist-db/
 │   ├── unified-server.js # Unified server with all features
 │   ├── package.json      # AI Memory MCP package
 │   └── README.md         # AI Memory documentation
-├── mcp-server/           # Research Assistant MCP (⚠️ DEPRECATED)
-│   ├── standalone-server.js
-│   ├── DEPRECATED.md     # Migration guide
-│   └── package.json
 ├── __tests__/            # Comprehensive test suite
 ├── docs/                 # API documentation and examples
 └── showcase/             # Additional demo applications
