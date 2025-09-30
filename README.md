@@ -34,7 +34,7 @@ Columnist-DB is a high-performance client-side database engine optimized for AI 
 
 ### Modular Installation
 
-Columnist-DB is designed as a modular system - install only what you need:
+Install only the components you need:
 
 #### Core Database Engine
 ```bash
@@ -46,14 +46,14 @@ npm install columnist-db-core
 npm install columnist-db-ai-memory
 ```
 
-#### React Hooks Integration
+#### React Hooks
 ```bash
 npm install columnist-db-hooks
 ```
 
-#### All-in-One (Development)
+#### RAG Database (Advanced)
 ```bash
-npm install columnist-db-core columnist-db-ai-memory columnist-db-hooks
+npm install rag-db
 ```
 
 ### Database Engine Usage
@@ -456,32 +456,12 @@ columnist-db/
 │   ├── core/             # Main database engine (columnist-db-core)
 │   ├── hooks/            # React hooks integration (columnist-db-hooks)
 │   ├── ai-memory/        # AI Memory MCP server (columnist-db-ai-memory)
-│   └── plugins/          # Sync and embedding plugins
-├── src/                  # Research Assistant demo app
-│   ├── app/              # Next.js app router pages
-│   ├── components/       # UI components
-│   ├── docs/             # Documentation pages
-│   └── page.tsx          # Main application
-├── packages/ai-memory/   # Unified AI Memory MCP (primary)
-│   ├── index.js          # Main MCP server implementation
-│   ├── unified-server.js # Unified server with all features
-│   ├── package.json      # AI Memory MCP package
-│   └── README.md         # AI Memory documentation
+│   └── rag-db/           # RAG database with AI integration
+├── mcp-server/           # Legacy MCP server (deprecated)
 ├── __tests__/            # Comprehensive test suite
-├── docs/                 # API documentation and examples
-└── showcase/             # Additional demo applications
+└── docs/                 # API documentation and examples
 ```
 
-### UI Framework
-
-The Research Assistant demo uses **Tailwind CSS** for styling with basic HTML components. The project includes a `components.json` configuration file for potential shadcn/ui integration, but no shadcn/ui components are currently installed or used.
-
-**To enhance the UI with shadcn/ui components (optional):**
-```bash
-# Install shadcn/ui
-npx shadcn@latest init
-npx shadcn@latest add button card input
-```
 
 ## 🚦 Development
 
@@ -497,37 +477,7 @@ npm test
 npm run build
 ```
 
-### Research Assistant Demo
-```bash
-# Navigate to demo directory
-cd app
-
-# Install demo dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
 ### MCP Server Setup
-
-**Research Assistant MCP (Showcase):**
-```bash
-# Navigate to MCP server directory
-cd mcp-server
-
-# Install dependencies
-npm install
-
-# Test the server
-node standalone-server.js
-```
 
 **Unified AI Memory MCP (Production):**
 ```bash
