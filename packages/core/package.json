@@ -1,7 +1,7 @@
 {
   "name": "columnist-db-core",
   "version": "1.2.3",
-  "description": "Core client-side database engine with IndexedDB persistence",
+  "description": "Core AI memory database engine with IndexedDB persistence, full-text search, vector search, and React hooks for LLM context management",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
