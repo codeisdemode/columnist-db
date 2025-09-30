@@ -1,134 +1,136 @@
-# Columnist-DB - Client-Side Database for Modern Web Applications
+# Columnist-DB - AI Memory Tool for LLM Context Management
 
-A production-ready client-side database with IndexedDB persistence, full-text search, and AI integration capabilities. Features a comprehensive Research Assistant demo showcasing real-world applications.
+A production-ready AI memory system that enables LLMs to manage their own context windows through persistent memory storage. Provides universal content storage, conversation memory, and semantic search capabilities similar to Claude's Memory Tool.
 
 ## 🚀 Key Features
 
-### Core Database Engine
-- **Client-Side Storage**: IndexedDB persistence with offline capabilities
-- **Full-Text Search**: TF-IDF based relevance scoring with inverted indexes
-- **Vector Search**: Semantic search with embeddings support
-- **Schema Validation**: Zod integration for type-safe data operations
-- **⚡ Enterprise-Grade Sync**: Multi-device synchronization with real-time conflict resolution
+### AI Memory Core
+- **Universal Content Storage**: Store conversations, documents, web content, notes, and custom data
+- **Persistent Context**: Cross-session memory retention for LLM context management
+- **Semantic Search**: Hybrid search combining vector embeddings and keyword matching
+- **Content Type Support**: Conversations, documents, web pages, notes, and custom types
 
-### 🔄 Advanced Sync Capabilities
-- **Multi-Device Synchronization**: Real-time sync across devices with device fingerprinting
-- **Conflict Resolution**: Smart strategies (local/remote wins, merge, device-aware, custom)
-- **Backend Adapters**: Firebase, Supabase, REST API with real-time listeners
-- **Offline-First**: Robust change tracking with automatic retry and exponential backoff
-- **Device Management**: Presence tracking, capability detection, and online status awareness
+### Memory Management
+- **Conversation Memory**: Store and retrieve AI conversation history
+- **Document Memory**: Persistent storage for documents and research materials
+- **Web Content Memory**: Archive and search web pages and online content
+- **Memory Statistics**: Track usage patterns and memory utilization
 
-### AI & Integration Features
-- **MCP Server**: AI assistant integration for persistent memory systems
-- **React Hooks**: Seamless integration with modern React applications
-- **Modular Architecture**: Component-based installation (shadcn/ui style)
+### MCP Integration
+- **AI Memory MCP Server**: Full MCP protocol implementation for LLM memory tools
+- **Research Assistant MCP**: Specialized research paper management (legacy)
+- **Claude Memory Tool Alternative**: Compatible with Claude Code and other MCP clients
 
-### Research Assistant Demo (Example Application)
-A showcase application demonstrating columnist-db capabilities:
-- **Paper Management**: Add, search, and organize research papers
-- **Note-Taking System**: Research notes linked to papers
-- **AI Integration**: MCP server with research tools for AI assistants
+### Advanced Features
+- **Cross-Session Persistence**: Memory persists across different agent sessions
+- **Semantic Relatedness**: Find related content using vector similarity
+- **Memory Export**: Export memory in JSON, CSV, and Markdown formats
+- **Memory Cleanup**: Selective clearing of memory by type or tags
 
 ## 🛠️ Quick Start
 
-### Component-Based Installation (shadcn/ui style)
+### AI Memory MCP Server Setup
 
-Columnist-DB supports modular installation similar to shadcn/ui, allowing you to install only the components you need:
+Columnist-DB provides an AI Memory MCP server that enables LLMs to manage their own context windows:
 
-#### Install Core Database Only
+#### Install AI Memory MCP Server
 ```bash
-npm install columnist-db-core
+npm install columnist-db-ai-memory
 ```
 
-```typescript
-import { ColumnistDB } from 'columnist-db-core';
-
-// Define your schema
-const schema = {
-  users: {
-    id: 'string',
-    name: 'string',
-    email: 'string'
+#### Configure for Claude Code
+Add to your Claude Code configuration:
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "node",
+      "args": ["./node_modules/columnist-db-ai-memory/index.js"],
+      "env": {
+        "DB_NAME": "ai-memory"
+      }
+    }
   }
-};
-
-// Initialize database
-const db = new ColumnistDB({ schema });
-
-// Use the database
-await db.insert('users', { name: 'John', email: 'john@example.com' });
-const users = await db.search('users', 'John');
-```
-
-#### Install React Hooks (Optional)
-```bash
-npm install columnist-db-hooks
-```
-
-```typescript
-import { useColumnistDB } from 'columnist-db-hooks';
-
-// Use in React components
-function MyComponent() {
-  const { db, isLoading, error } = useColumnistDB({ schema });
-  // ...
 }
 ```
 
-#### Install Full Package (All Components)
-```bash
-npm install columnist-db
-```
-
+#### Basic Memory Operations
 ```typescript
-import { ColumnistDB } from 'columnist-db';
-// Includes core + hooks + plugins
+// Store conversation with AI
+await mcp.store_conversation({
+  messages: JSON.stringify([
+    { role: "user", content: "What is machine learning?" },
+    { role: "assistant", content: "Machine learning is..." }
+  ]),
+  summary: "Discussion about machine learning concepts",
+  tags: "ai, machine-learning, education"
+});
+
+// Search memory across all content
+const results = await mcp.search_memory({
+  query: "machine learning",
+  content_type: "conversation",
+  limit: 5
+});
+
+// Get memory statistics
+const stats = await mcp.get_memory_stats();
 ```
 
-### Example: Research Assistant Demo
+### Advanced Memory Usage
 
-To see columnist-db in action, try the Research Assistant demo application:
+#### Store Various Content Types
+```typescript
+// Store documents
+await mcp.store_document({
+  content: "Technical documentation about AI systems...",
+  title: "AI Systems Documentation",
+  author: "AI Assistant",
+  document_type: "technical",
+  tags: "ai, documentation, technical"
+});
 
-1. **Clone the repository**
-```bash
-git clone https://github.com/codeisdemode/columnist-db.git
-cd columnist-db/app
+// Store web content
+await mcp.store_web_content({
+  content: "Web page content about neural networks...",
+  url: "https://example.com/neural-networks",
+  title: "Neural Networks Explained",
+  summary: "Comprehensive guide to neural networks"
+});
+
+// Universal content storage
+await mcp.store_content({
+  content: "Important project notes and insights",
+  content_type: "note",
+  title: "Project Insights",
+  tags: "project, insights, important"
+});
 ```
-
-2. **Install dependencies and run**
-```bash
-npm install
-npm run dev
-```
-
-3. **Open [http://localhost:3000](http://localhost:3000)** and explore:
-   - Add sample papers using the "Add Sample Paper" button
-   - Search for papers using the search bar
-   - Add notes to papers using "Add Sample Note"
-   - Switch between different tabs to explore features
 
 ## 🚀 Features
 
-### Core Database Engine
-- **Client-Side Storage**: IndexedDB persistence with offline capabilities
-- **Full-Text Search**: TF-IDF based relevance scoring with inverted indexes
-- **Vector Search**: Semantic search with embeddings support
-- **Schema Validation**: Zod integration for type-safe data operations
-- **Multi-Device Sync**: Enterprise-grade synchronization with conflict resolution
+### AI Memory Core
+- **Universal Content Storage**: Store any content type (conversations, documents, web, notes, custom)
+- **Persistent Context**: Cross-session memory retention for LLM context management
+- **Semantic Search**: Hybrid search combining vector embeddings and keyword matching
+- **Content Type Support**: Conversations, documents, web pages, notes, and custom types
 
-### AI & Integration Features
-- **Dual MCP Servers**:
-  - **Research Assistant MCP**: Specialized research paper management (showcase)
-  - **AI Memory MCP**: Universal content storage for AI memory function (production)
-- **React Hooks**: Seamless integration with modern React applications
-- **Modular Architecture**: Component-based installation (shadcn/ui style)
-- **Advanced RAG Platform**: Hybrid search with semantic capabilities
+### Memory Management
+- **Conversation Memory**: Store and retrieve AI conversation history
+- **Document Memory**: Persistent storage for documents and research materials
+- **Web Content Memory**: Archive and search web pages and online content
+- **Memory Statistics**: Track usage patterns and memory utilization
 
-### Example: Research Assistant Demo
-A showcase application demonstrating columnist-db capabilities:
-- **Paper Management**: Add, search, and organize research papers
-- **Note-Taking System**: Research notes linked to papers
-- **AI Integration**: MCP server with research tools for AI assistants
+### MCP Integration
+- **AI Memory MCP Server**: Full MCP protocol implementation for LLM memory tools
+- **Research Assistant MCP**: Specialized research paper management (legacy)
+- **Claude Memory Tool Alternative**: Compatible with Claude Code and other MCP clients
+
+### Advanced Features
+- **Cross-Session Persistence**: Memory persists across different agent sessions
+- **Semantic Relatedness**: Find related content using vector similarity
+- **Memory Export**: Export memory in JSON, CSV, and Markdown formats
+- **Memory Cleanup**: Selective clearing of memory by type or tags
 
 ## 📋 Prerequisites
 
@@ -137,9 +139,41 @@ A showcase application demonstrating columnist-db capabilities:
 
 ## 🤖 MCP Server Setup
 
-Columnist-DB provides two specialized MCP servers for different use cases:
+Columnist-DB provides specialized MCP servers for AI memory management:
 
-### Research Assistant MCP (Showcase)
+### AI Memory MCP (Primary)
+Universal content storage for LLM context management:
+
+**For Claude Code Configuration:**
+```json
+{
+  "mcpServers": {
+    "ai-memory": {
+      "command": "node",
+      "args": ["./mcp-server-ai-memory/index.js"],
+      "env": {
+        "DB_NAME": "ai-memory"
+      }
+    }
+  }
+}
+```
+
+**Available Memory Tools:**
+- `store_content` - Universal content storage for any type
+- `search_memory` - Search across all stored content with filters
+- `get_content` - Retrieve specific content by ID
+- `store_conversation` - Save AI conversation history
+- `search_conversations` - Search conversation history
+- `store_document` - Store documents with metadata
+- `store_web_content` - Store web pages or online content
+- `get_memory_stats` - Get memory usage statistics
+- `clear_memory` - Clear all or filtered content
+- `export_memory` - Export memory in JSON, CSV, or Markdown
+- `find_related_content` - Discover semantically related content
+- `summarize_content` - Generate summaries of stored content
+
+### Research Assistant MCP (Legacy)
 Specialized for academic research paper management:
 
 **For Claude Code Configuration:**
@@ -161,32 +195,6 @@ Specialized for academic research paper management:
 - `add_research_paper` - Add new research papers
 - `search_papers` - Search with full-text and semantic capabilities
 - `get_research_summary` - Get analytics on your research collection
-- `export_research_data` - Export to JSON, CSV, or BibTeX
-
-### AI Memory MCP (Production)
-Universal content storage for AI memory function:
-
-**For Claude Code Configuration:**
-```json
-{
-  "mcpServers": {
-    "ai-memory": {
-      "command": "node",
-      "args": ["./mcp-server-ai-memory/index.js"],
-      "env": {
-        "DB_NAME": "ai-memory"
-      }
-    }
-  }
-}
-```
-
-**Available Tools:**
-- `store_content` - Store any content type (conversations, documents, web, notes)
-- `search_memory` - Search across all stored content
-- `store_conversation` - Save AI conversation history
-- `get_memory_stats` - Get memory usage statistics
-- `find_related_content` - Discover semantically related content
 
 ## 🔄 Multi-Device Sync Setup
 
@@ -224,16 +232,24 @@ console.log('Sync status:', status);
 
 ## 🏗️ Architecture
 
+```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Next.js App   │◄──►│  columnist-db    │◄──►│   IndexedDB     │
-│  (React 19)     │    │     Core         │    │   (Browser)     │
+│   LLM Assistant │◄──►│  AI Memory MCP   │◄──►│   IndexedDB     │
+│  (Claude Code)  │    │     Server       │    │   (Browser)     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   MCP Server    │◄──►│   AI Assistants  │    │   Vector Search │
-│  (Claude Code)  │    │   (ChatGPT)      │    │   (Embeddings)  │
+│   Memory Tools  │    │   Content Types  │    │   Vector Search │
+│  (12 tools)     │    │   (5 types)      │    │   (Embeddings)  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
+```
+
+### Data Flow
+1. **Memory Operations**: LLM calls memory tools via MCP protocol
+2. **Content Storage**: Universal storage for conversations, documents, web content
+3. **Semantic Search**: Hybrid search combining vector and keyword matching
+4. **Cross-Session Persistence**: Memory retained across different LLM sessions
 
 ## 📊 Database Schema
 
@@ -262,20 +278,26 @@ console.log('Sync status:', status);
 
 ## 🎯 Use Cases
 
-### Academic Research
-- Organize literature reviews
-- Track research progress
-- Collaborate on papers
+### LLM Context Management
+- **Persistent Memory**: Enable LLMs to maintain context across conversations
+- **Session Continuity**: Retain important information between different LLM sessions
+- **Context Window Extension**: Store and retrieve relevant context beyond token limits
 
-### AI Memory Systems
-- Persistent context for AI assistants
-- Document memory across sessions
-- Research paper retrieval for AI analysis
+### AI Assistant Memory
+- **Conversation History**: Store and search past conversations with users
+- **Document Memory**: Remember important documents and their contents
+- **Web Content Archive**: Save and retrieve web pages and online resources
+- **Personal Knowledge Base**: Build persistent knowledge for AI assistants
 
-### Personal Knowledge Management
-- Build personal research libraries
-- Connect notes across papers
-- Semantic search for insights
+### Research and Analysis
+- **Research Paper Management**: Organize and search academic papers
+- **Note Organization**: Store and retrieve research notes and insights
+- **Semantic Discovery**: Find related content using vector similarity
+
+### Enterprise AI Applications
+- **Customer Support**: Maintain context across customer interactions
+- **Technical Documentation**: Store and retrieve technical knowledge
+- **Project Memory**: Remember project details and requirements
 
 ## 🔧 Technical Highlights
 
@@ -290,23 +312,23 @@ console.log('Sync status:', status);
 
 ```
 columnist-db/
-├── packages/              # Modular packages (shadcn/ui style)
+├── packages/              # Modular packages
 │   ├── core/             # Main database engine (columnist-db-core)
 │   ├── hooks/            # React hooks integration (columnist-db-hooks)
+│   ├── ai-memory/        # AI Memory MCP server (columnist-db-ai-memory)
 │   └── plugins/          # Sync and embedding plugins
 ├── src/                  # Research Assistant demo app
 │   ├── app/              # Next.js app router pages
 │   ├── components/       # UI components
 │   ├── docs/             # Documentation pages
 │   └── page.tsx          # Main application
-├── mcp-server/           # Research Assistant MCP (showcase)
+├── mcp-server-ai-memory/ # AI Memory MCP (primary)
+│   ├── index.js          # Main MCP server implementation
+│   ├── package.json      # AI Memory MCP package
+│   └── README.md         # AI Memory documentation
+├── mcp-server/           # Research Assistant MCP (legacy)
 │   ├── standalone-server.js
-│   ├── package.json
-│   └── configuration files
-├── mcp-server-ai-memory/ # AI Memory MCP (production)
-│   ├── index.js
-│   ├── package.json
-│   └── README.md
+│   └── package.json
 ├── __tests__/            # Comprehensive test suite
 ├── docs/                 # API documentation and examples
 └── showcase/             # Additional demo applications
@@ -398,4 +420,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ---
 
-**Built with ❤️ - Columnist-DB: The production-ready client-side database for modern web applications with AI integration capabilities.**
+**Built with ❤️ - Columnist-DB: The AI Memory Tool that enables LLMs to manage their own context windows through persistent memory storage.**

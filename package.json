@@ -1,6 +1,7 @@
 {
   "name": "columnist-db",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "AI Memory Tool for LLM Context Management - Persistent memory storage for AI assistants",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
