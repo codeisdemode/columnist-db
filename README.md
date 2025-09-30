@@ -1,3 +1,4 @@
+#in development status
 # Columnist-DB - Columnar Database Engine for AI Applications
 
 **Production-grade columnar database with hybrid search, vector embeddings, and MCP integration. Query 100k embeddings in <50ms with client-side persistence.**
