@@ -17,8 +17,8 @@ A production-ready AI memory system that enables LLMs to manage their own contex
 - **Memory Statistics**: Track usage patterns and memory utilization
 
 ### MCP Integration
-- **AI Memory MCP Server**: Full MCP protocol implementation for LLM memory tools
-- **Research Assistant MCP**: Specialized research paper management (legacy)
+- **Unified AI Memory MCP Server**: Single server with 16 memory tools for all content types
+- **Advanced Memory Features**: Contextual search, memory consolidation, export capabilities
 - **Claude Memory Tool Alternative**: Compatible with Claude Code and other MCP clients
 
 ### Advanced Features
@@ -29,9 +29,9 @@ A production-ready AI memory system that enables LLMs to manage their own contex
 
 ## 🛠️ Quick Start
 
-### AI Memory MCP Server Setup
+### Unified AI Memory MCP Server Setup
 
-Columnist-DB provides an AI Memory MCP server that enables LLMs to manage their own context windows:
+Columnist-DB provides a unified AI Memory MCP server that enables LLMs to manage their own context windows with comprehensive memory capabilities:
 
 #### Install AI Memory MCP Server
 ```bash
@@ -105,6 +105,16 @@ await mcp.store_content({
   title: "Project Insights",
   tags: "project, insights, important"
 });
+
+// Store research papers
+await mcp.store_research_paper({
+  title: "Attention Is All You Need",
+  authors: "Vaswani et al.",
+  abstract: "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms...",
+  publication_date: "2017-06-12",
+  tags: "transformers, attention, nlp",
+  journal: "NeurIPS"
+});
 ```
 
 ## 🚀 Features
@@ -122,8 +132,8 @@ await mcp.store_content({
 - **Memory Statistics**: Track usage patterns and memory utilization
 
 ### MCP Integration
-- **AI Memory MCP Server**: Full MCP protocol implementation for LLM memory tools
-- **Research Assistant MCP**: Specialized research paper management (legacy)
+- **Unified AI Memory MCP Server**: Single server with 16 memory tools for all content types
+- **Advanced Memory Features**: Contextual search, memory consolidation, export capabilities
 - **Claude Memory Tool Alternative**: Compatible with Claude Code and other MCP clients
 
 ### Advanced Features
@@ -159,7 +169,7 @@ Universal content storage for LLM context management:
 }
 ```
 
-**Available Memory Tools:**
+**Available Memory Tools (16 tools):**
 - `store_content` - Universal content storage for any type
 - `search_memory` - Search across all stored content with filters
 - `get_content` - Retrieve specific content by ID
@@ -167,34 +177,21 @@ Universal content storage for LLM context management:
 - `search_conversations` - Search conversation history
 - `store_document` - Store documents with metadata
 - `store_web_content` - Store web pages or online content
+- `store_research_paper` - Store research papers with academic metadata
 - `get_memory_stats` - Get memory usage statistics
 - `clear_memory` - Clear all or filtered content
 - `export_memory` - Export memory in JSON, CSV, or Markdown
 - `find_related_content` - Discover semantically related content
 - `summarize_content` - Generate summaries of stored content
+- `contextual_memory_search` - Search with contextual awareness
+- `consolidate_memories` - Optimize and consolidate memory storage
 
-### Research Assistant MCP (Legacy)
-Specialized for academic research paper management:
+### Research Assistant MCP (⚠️ DEPRECATED)
+**This MCP server has been deprecated and replaced by the unified AI Memory MCP server.**
 
-**For Claude Code Configuration:**
-```json
-{
-  "mcpServers": {
-    "research-assistant": {
-      "command": "node",
-      "args": ["./mcp-server/standalone-server.js"],
-      "env": {
-        "DB_NAME": "research-assistant"
-      }
-    }
-  }
-}
-```
+All research paper management capabilities are now available in the unified AI Memory MCP server via the `store_research_paper` tool and `search_memory` with `content_type: "research"`.
 
-**Available Tools:**
-- `add_research_paper` - Add new research papers
-- `search_papers` - Search with full-text and semantic capabilities
-- `get_research_summary` - Get analytics on your research collection
+**Migration:** Use the unified AI Memory MCP server configuration shown above. See `mcp-server/DEPRECATED.md` for migration details.
 
 ## 🔄 Multi-Device Sync Setup
 
@@ -322,12 +319,14 @@ columnist-db/
 │   ├── components/       # UI components
 │   ├── docs/             # Documentation pages
 │   └── page.tsx          # Main application
-├── mcp-server-ai-memory/ # AI Memory MCP (primary)
+├── packages/ai-memory/   # Unified AI Memory MCP (primary)
 │   ├── index.js          # Main MCP server implementation
+│   ├── unified-server.js # Unified server with all features
 │   ├── package.json      # AI Memory MCP package
 │   └── README.md         # AI Memory documentation
-├── mcp-server/           # Research Assistant MCP (legacy)
+├── mcp-server/           # Research Assistant MCP (⚠️ DEPRECATED)
 │   ├── standalone-server.js
+│   ├── DEPRECATED.md     # Migration guide
 │   └── package.json
 ├── __tests__/            # Comprehensive test suite
 ├── docs/                 # API documentation and examples
@@ -391,16 +390,13 @@ npm install
 node standalone-server.js
 ```
 
-**AI Memory MCP (Production):**
+**Unified AI Memory MCP (Production):**
 ```bash
-# Navigate to AI Memory MCP directory
-cd mcp-server-ai-memory
-
-# Install dependencies
-npm install
+# Install the AI Memory MCP package
+npm install columnist-db-ai-memory
 
 # Test the server
-node index.js
+node node_modules/columnist-db-ai-memory/index.js
 ```
 
 ## 🤝 Contributing
