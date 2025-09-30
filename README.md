@@ -32,6 +32,30 @@ Columnist-DB is a high-performance client-side database engine optimized for AI 
 
 ## 🛠️ Quick Start
 
+### Modular Installation
+
+Columnist-DB is designed as a modular system - install only what you need:
+
+#### Core Database Engine
+```bash
+npm install columnist-db-core
+```
+
+#### AI Memory MCP Server
+```bash
+npm install columnist-db-ai-memory
+```
+
+#### React Hooks Integration
+```bash
+npm install columnist-db-hooks
+```
+
+#### All-in-One (Development)
+```bash
+npm install columnist-db-core columnist-db-ai-memory columnist-db-hooks
+```
+
 ### Database Engine Usage
 
 #### Install Core Database
@@ -74,6 +98,36 @@ const results = await db.search('memories', {
   vector: [0.1, 0.2, 0.3],
   similarityThreshold: 0.7
 });
+```
+
+### React Hooks Integration
+
+#### Install React Hooks
+```bash
+npm install columnist-db-hooks
+```
+
+#### Usage with React
+```typescript
+import { useColumnist } from 'columnist-db-hooks';
+
+function MyComponent() {
+  const { db, loading, error } = useColumnist('my-app', { schema });
+
+  if (loading) return <div>Loading database...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  const handleSearch = async (query: string) => {
+    const results = await db.search('memories', { query });
+    return results;
+  };
+
+  return (
+    <div>
+      <SearchComponent onSearch={handleSearch} />
+    </div>
+  );
+}
 ```
 
 ### MCP Integration for AI Memory
