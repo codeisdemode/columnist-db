@@ -510,8 +510,6 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 Columnist-DB is fundamentally a **database engine** that happens to excel at AI memory use cases. This positioning matters because:
 
-- **Technical Credibility**: Developers trust database engines more than AI wrappers
-- **Broader Appeal**: Use it for analytics, search, or any data-intensive app, not just AI
 - **Performance Focus**: Database engines are optimized for speed and efficiency
 - **Production Ready**: Built with enterprise features like sync, migrations, and monitoring
 
