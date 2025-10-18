@@ -367,7 +367,7 @@ console.log('Sync status:', status);
 }
 ```
 
-## 📊 Performance Benchmarks
+## Performance Benchmarks
 
 ### Database Engine Performance
 - **Vector Search**: Query 100k embeddings in <50ms (browser)
@@ -409,7 +409,7 @@ console.log('Sync status:', status);
 - **Technical Documentation**: Store and retrieve technical knowledge
 - **Project Memory**: Remember project details and requirements
 
-## 🔧 Technical Architecture
+## Technical Architecture
 
 ### Core Database Engine
 - **Columnar Storage**: Optimized for vector operations and analytical queries
@@ -464,7 +464,7 @@ columnist-db/
 ```
 
 
-## 🚦 Development
+## Development
 
 ### Core Library Development
 ```bash
@@ -500,7 +500,7 @@ We welcome contributions to both the core columnist-db library and the Research 
 - **Documentation**: API documentation and tutorials
 - **Testing**: Additional test coverage and examples
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
