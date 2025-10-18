@@ -395,6 +395,8 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   private authHooks: Map<string, (operation: string, table: string, data?: any) => boolean> = new Map()
   private syncManager: SyncManager | null = null
   private options: ColumnistDBOptions
+  private useInMemory: boolean = false
+  private inMemoryStorage: InMemoryStorage | null = null
 
   private constructor(name: string, schema: SchemaDefinition, version: number, options: ColumnistDBOptions, migrations?: Record<number, (db: IDBDatabase, tx: IDBTransaction, oldVersion: number) => void>) {
     this.name = name
@@ -473,7 +475,22 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   async load(): Promise<void> {
     if (!isClientIndexedDBAvailable()) {
-      throw new Error(`IndexedDB is not available. Columnist requires a browser environment.\n\n${suggestNodeJSCompatibility()}`)
+      // Fall back to in-memory storage when IndexedDB is unavailable
+      console.warn("IndexedDB not available. Falling back to in-memory storage. Data will not persist.")
+      this.useInMemory = true
+      this.inMemoryStorage = getInMemoryStorage()
+
+      // Initialize in-memory stores for all tables
+      for (const table of Object.keys(this.schema)) {
+        this.inMemoryStorage.createStore(table)
+        this.inMemoryStorage.createStore(indexStoreName(table))
+        this.inMemoryStorage.createStore(vectorStoreName(table))
+        this.inMemoryStorage.createStore(ivfStoreName(table))
+      }
+      this.inMemoryStorage.createStore(META_SCHEMA_STORE)
+      this.inMemoryStorage.createStore(META_STATS_STORE)
+
+      return
     }
 
     const openReq = indexedDB.open(this.name, this.version)
@@ -2221,7 +2238,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   }
 
   private ensureDb(): void {
-    if (!this.db) throw new Error("Database not loaded. Call load() first.")
+    if (!this.db && !this.useInMemory) throw new Error("Database not loaded. Call load() first.")
   }
 
   private ensureTable(table: string): TableDefinition {
