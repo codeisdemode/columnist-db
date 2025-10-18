@@ -1,0 +1,13 @@
+{
+  "name": "rag-db-demo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "demo": "tsx simple-demo.ts",
+    "dev": "tsx --watch simple-demo.ts"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.2",
+    "tsx": "^4.20.6"
+  }
+}

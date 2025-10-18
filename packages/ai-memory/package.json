@@ -1,0 +1,68 @@
+{
+  "name": "columnist-db-ai-memory",
+  "version": "1.0.0",
+  "description": "AI Memory MCP Server for ColumnistDB - Universal content storage for AI memory function",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "dev": "tsc --project tsconfig.json --watch",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "columnist-db-core": "^1.2.3",
+    "@modelcontextprotocol/sdk": "^1.17.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "ai",
+    "memory",
+    "rag",
+    "vector-search",
+    "conversation",
+    "document-storage",
+    "ai-assistant",
+    "llm",
+    "context-management",
+    "claude-memory"
+  ],
+  "author": "ColumnistDB Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codeisdemode/columnist-db"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "mcp": {
+    "schema_version": "2024-11-05",
+    "protocol_version": "2024-11-05",
+    "capabilities": {
+      "resources": {
+        "subscribe": false
+      },
+      "tools": {}
+    }
+  }
+}

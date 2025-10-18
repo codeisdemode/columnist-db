@@ -1,0 +1,47 @@
+{
+  "name": "columnist-db-mcp-ai-memory",
+  "version": "1.0.0",
+  "description": "AI Memory MCP Server for ColumnistDB - Universal content storage for AI memory function",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "columnist-db-ai-memory": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "dependencies": {
+    "columnist-db-core": "file:../packages/core"
+  },
+  "keywords": [
+    "mcp",
+    "ai",
+    "memory",
+    "rag",
+    "vector-search",
+    "conversation",
+    "document-storage",
+    "ai-assistant"
+  ],
+  "author": "ColumnistDB Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/columnist-db/columnist-db"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "mcp": {
+    "schema_version": "2024-11-05",
+    "protocol_version": "2024-11-05",
+    "capabilities": {
+      "resources": {
+        "subscribe": false
+      },
+      "tools": {}
+    }
+  }
+}
