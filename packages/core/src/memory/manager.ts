@@ -2,40 +2,25 @@
 // Implements vector embeddings, semantic search, and memory consolidation
 
 import * as crypto from 'crypto';
-
-export interface MemoryRecord {
-  id: string;
-  content: string;
-  contentType: string;
-  vector: number[]; // Embedding vector
-  metadata?: any;
-  importance: number; // 0-1 importance score
-  accessCount: number;
-  lastAccessed: number;
-  createdAt: number;
-  updatedAt: number;
-  category?: string;
-  tags?: string[];
-}
-
-export interface SearchResult {
-  memory: MemoryRecord;
-  relevance: number; // 0-1 relevance score
-  similarity: number; // Cosine similarity
-}
-
-export interface MemoryQueryOptions {
-  limit?: number;
-  minImportance?: number;
-  category?: string;
-  tags?: string[];
-  semanticSearch?: string;
-  includeRelated?: boolean;
-}
+import {
+  MemoryRecord,
+  MemoryQueryOptions,
+  MemorySearchResult,
+  SearchResult,
+  DocumentRecord,
+  DocumentChunk,
+  DocumentSearchOptions,
+  DocumentSearchResult,
+  EmbeddingProvider,
+  DocumentProcessingOptions
+} from './types';
 
 export class MemoryManager {
   private memories = new Map<string, MemoryRecord>();
   private vectorIndex: Map<string, number[]> = new Map();
+  private documents = new Map<string, DocumentRecord>();
+  private documentChunks = new Map<string, DocumentChunk>();
+  private embeddingProvider: EmbeddingProvider | null = null;
   private initialized = false;
 
   constructor(private db: any) {}
@@ -417,5 +402,505 @@ export class MemoryManager {
     }
 
     return dotProduct / (magnitudeA * magnitudeB);
+  }
+
+  // Document Processing Methods
+
+  /**
+   * Register an embedding provider for document processing
+   */
+  registerEmbeddingProvider(provider: EmbeddingProvider): void {
+    this.embeddingProvider = provider;
+    console.log('[MemoryManager] Embedding provider registered:', provider.getModel());
+  }
+
+  /**
+   * Unregister the current embedding provider
+   */
+  unregisterEmbeddingProvider(): void {
+    this.embeddingProvider = null;
+    console.log('[MemoryManager] Embedding provider unregistered');
+  }
+
+  /**
+   * Check if an embedding provider is available
+   */
+  hasEmbeddingProvider(): boolean {
+    return this.embeddingProvider !== null;
+  }
+
+  /**
+   * Get information about the current embedding provider
+   */
+  getEmbeddingProviderInfo(): { model: string; dimensions: number } | null {
+    if (!this.embeddingProvider) {
+      return null;
+    }
+    return {
+      model: this.embeddingProvider.getModel(),
+      dimensions: this.embeddingProvider.getDimensions()
+    };
+  }
+
+  /**
+   * Add a document with automatic chunking
+   */
+  async addDocument(
+    content: string,
+    metadata: Record<string, any> = {},
+    options: DocumentProcessingOptions = {}
+  ): Promise<string> {
+    await this.initialize();
+
+    const documentId = this.generateDocumentId();
+    const now = new Date();
+
+    // Chunk the content
+    const chunks = await this.chunkContent(content, options);
+
+    // Store main document
+    const nowTimestamp = Date.now();
+    const document: DocumentRecord = {
+      id: documentId,
+      content,
+      contentType: 'document',
+      vector: await this.generateEmbedding(content),
+      metadata: { ...metadata, originalLength: content.length },
+      importance: this.calculateInitialImportance(content, 'document'),
+      accessCount: 0,
+      lastAccessed: nowTimestamp,
+      createdAt: nowTimestamp,
+      updatedAt: nowTimestamp,
+      category: metadata?.category || 'document',
+      tags: metadata?.tags,
+      timestamp: now,
+      chunks: [],
+      chunkingStrategy: options.chunkingStrategy || 'semantic',
+      originalLength: content.length,
+      chunkCount: chunks.length,
+      documentType: metadata?.documentType || 'general'
+    };
+
+    this.documents.set(documentId, document);
+
+    // Store chunks with embeddings
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkId = this.generateChunkId();
+
+      let chunkVector: Float32Array | undefined;
+      if (this.embeddingProvider && options.generateEmbeddings !== false) {
+        try {
+          chunkVector = await this.embeddingProvider.generateEmbedding(chunk);
+        } catch (error) {
+          console.warn('[MemoryManager] Failed to generate embedding for chunk, using fallback:', error);
+          // Fallback to basic embedding
+          const basicEmbedding = await this.generateEmbedding(chunk);
+          chunkVector = new Float32Array(basicEmbedding);
+        }
+      } else if (options.generateEmbeddings !== false) {
+        // Use basic embedding as fallback
+        const basicEmbedding = await this.generateEmbedding(chunk);
+        chunkVector = new Float32Array(basicEmbedding);
+      }
+
+      const documentChunk: DocumentChunk = {
+        id: chunkId,
+        documentId,
+        content: chunk,
+        metadata: {
+          ...metadata,
+          chunkIndex: i,
+          totalChunks: chunks.length,
+          embeddingProvider: this.embeddingProvider ? this.embeddingProvider.getModel() : 'basic'
+        },
+        chunkIndex: i,
+        vector: chunkVector,
+        createdAt: now,
+        importance: this.calculateChunkImportance(chunk, i, chunks.length),
+        accessCount: 0,
+        lastAccessed: now
+      };
+
+      this.documentChunks.set(chunkId, documentChunk);
+      document.chunks!.push(documentChunk);
+    }
+
+    // Store in database if available
+    if (this.db && this.db.documents) {
+      await this.db.documents.insert(document);
+      for (const chunk of document.chunks!) {
+        await this.db.documentChunks.insert(chunk);
+      }
+    }
+
+    return documentId;
+  }
+
+  /**
+   * Search documents with hybrid search capabilities
+   */
+  async searchDocuments(
+    query: string,
+    options: DocumentSearchOptions = {}
+  ): Promise<DocumentSearchResult[]> {
+    await this.initialize();
+
+    const limit = options.limit || 10;
+    const threshold = options.similarityThreshold || 0.5;
+
+    let results: DocumentSearchResult[] = [];
+
+    // Hybrid search: semantic + keyword
+    if (options.searchStrategy === 'hybrid' || options.searchStrategy === 'semantic') {
+      const semanticResults = await this.semanticDocumentSearch(query, limit * 2, threshold);
+      results.push(...semanticResults);
+    }
+
+    if (options.searchStrategy === 'hybrid' || options.searchStrategy === 'keyword') {
+      const keywordResults = await this.keywordDocumentSearch(query, limit * 2, threshold);
+      results.push(...keywordResults);
+    }
+
+    // Deduplicate and rank results
+    const uniqueResults = this.deduplicateDocumentResults(results);
+    const rankedResults = this.rankDocumentResults(uniqueResults, query);
+
+    // Add highlights if requested
+    if (options.includeHighlights) {
+      for (const result of rankedResults) {
+        result.highlights = this.generateHighlights(result.memory.content, query);
+      }
+    }
+
+    return rankedResults.slice(0, limit);
+  }
+
+  /**
+   * Get all chunks for a specific document
+   */
+  async getDocumentChunks(documentId: string): Promise<DocumentChunk[]> {
+    const chunks: DocumentChunk[] = [];
+
+    for (const [chunkId, chunk] of this.documentChunks) {
+      if (chunk.documentId === documentId) {
+        chunks.push(chunk);
+      }
+    }
+
+    // Sort by chunk index
+    return chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
+  }
+
+  /**
+   * Consolidate document chunks (merge similar chunks)
+   */
+  async consolidateDocumentChunks(documentId: string): Promise<void> {
+    const chunks = await this.getDocumentChunks(documentId);
+    if (chunks.length <= 1) return;
+
+    // Simple consolidation: merge adjacent chunks with high similarity
+    const consolidated: DocumentChunk[] = [];
+    let currentChunk = chunks[0];
+
+    for (let i = 1; i < chunks.length; i++) {
+      const nextChunk = chunks[i];
+
+      if (currentChunk.vector && nextChunk.vector) {
+        const similarity = this.cosineSimilarity(
+          Array.from(currentChunk.vector),
+          Array.from(nextChunk.vector)
+        );
+
+        if (similarity > 0.8) {
+          // Merge chunks
+          currentChunk.content += ' ' + nextChunk.content;
+          currentChunk.metadata.consolidated = true;
+          currentChunk.metadata.mergedChunks = (currentChunk.metadata.mergedChunks || 1) + 1;
+        } else {
+          consolidated.push(currentChunk);
+          currentChunk = nextChunk;
+        }
+      } else {
+        consolidated.push(currentChunk);
+        currentChunk = nextChunk;
+      }
+    }
+
+    consolidated.push(currentChunk);
+
+    // Update chunks in memory
+    for (const chunk of chunks) {
+      this.documentChunks.delete(chunk.id);
+    }
+
+    for (let i = 0; i < consolidated.length; i++) {
+      const chunk = consolidated[i];
+      chunk.chunkIndex = i;
+      this.documentChunks.set(chunk.id, chunk);
+    }
+
+    // Update document
+    const document = this.documents.get(documentId);
+    if (document) {
+      document.chunks = consolidated;
+      document.chunkCount = consolidated.length;
+    }
+  }
+
+  // Private helper methods for document processing
+
+  private async chunkContent(
+    content: string,
+    options: DocumentProcessingOptions = {}
+  ): Promise<string[]> {
+    const strategy = options.chunkingStrategy || 'semantic';
+    const maxChunkSize = options.maxChunkSize || 500;
+    const minChunkSize = options.minChunkSize || 50;
+
+    switch (strategy) {
+      case 'semantic':
+        return this.semanticChunking(content, maxChunkSize, minChunkSize);
+      case 'fixed':
+        return this.fixedSizeChunking(content, maxChunkSize);
+      case 'recursive':
+        return this.recursiveChunking(content, maxChunkSize, minChunkSize);
+      default:
+        return this.semanticChunking(content, maxChunkSize, minChunkSize);
+    }
+  }
+
+  private semanticChunking(content: string, maxChunkSize: number = 500, minChunkSize: number = 50): string[] {
+    // Simple semantic chunking based on paragraphs and sentences
+    const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    const chunks: string[] = [];
+
+    for (const paragraph of paragraphs) {
+      if (paragraph.length > maxChunkSize) {
+        // Split long paragraphs
+        const sentences = paragraph.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        let currentChunk = '';
+
+        for (const sentence of sentences) {
+          if ((currentChunk + sentence).length > maxChunkSize) {
+            if (currentChunk.length >= minChunkSize) chunks.push(currentChunk.trim());
+            currentChunk = sentence;
+          } else {
+            currentChunk += ' ' + sentence;
+          }
+        }
+        if (currentChunk.length >= minChunkSize) chunks.push(currentChunk.trim());
+      } else if (paragraph.length >= minChunkSize) {
+        chunks.push(paragraph.trim());
+      }
+    }
+
+    return chunks;
+  }
+
+  private fixedSizeChunking(content: string, chunkSize: number = 500): string[] {
+    const chunks: string[] = [];
+    let start = 0;
+
+    while (start < content.length) {
+      let end = start + chunkSize;
+
+      // Try to break at sentence boundaries
+      if (end < content.length) {
+        const nextPeriod = content.indexOf('.', end);
+        const nextSpace = content.indexOf(' ', end);
+
+        if (nextPeriod !== -1 && nextPeriod < end + 100) {
+          end = nextPeriod + 1;
+        } else if (nextSpace !== -1) {
+          end = nextSpace;
+        }
+      }
+
+      const chunk = content.slice(start, end).trim();
+      if (chunk.length > 0) {
+        chunks.push(chunk);
+      }
+      start = end;
+    }
+
+    return chunks;
+  }
+
+  private recursiveChunking(content: string, maxChunkSize: number = 500, minChunkSize: number = 50): string[] {
+    // Simple recursive chunking - split by paragraphs first, then sentences
+    const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    const chunks: string[] = [];
+
+    for (const paragraph of paragraphs) {
+      if (paragraph.length <= maxChunkSize && paragraph.length >= minChunkSize) {
+        chunks.push(paragraph.trim());
+      } else {
+        // Split into sentences
+        const sentences = paragraph.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const sentenceChunks = this.fixedSizeChunking(sentences.join('. '), Math.floor(maxChunkSize / 2));
+        chunks.push(...sentenceChunks.filter(chunk => chunk.length >= minChunkSize));
+      }
+    }
+
+    return chunks;
+  }
+
+  private async semanticDocumentSearch(query: string, limit: number, threshold: number): Promise<DocumentSearchResult[]> {
+    if (!this.embeddingProvider) {
+      console.log('[MemoryManager] No embedding provider available for semantic search, falling back to keyword search');
+      return this.keywordDocumentSearch(query, limit, threshold);
+    }
+
+    let queryEmbedding: Float32Array;
+    try {
+      queryEmbedding = await this.embeddingProvider.generateEmbedding(query);
+    } catch (error) {
+      console.warn('[MemoryManager] Failed to generate query embedding, falling back to keyword search:', error);
+      return this.keywordDocumentSearch(query, limit, threshold);
+    }
+
+    const results: DocumentSearchResult[] = [];
+
+    // Search through document chunks
+    for (const [chunkId, chunk] of this.documentChunks) {
+      if (chunk.vector) {
+        const similarity = this.cosineSimilarity(Array.from(queryEmbedding), Array.from(chunk.vector));
+
+        if (similarity >= threshold) {
+          const document = this.documents.get(chunk.documentId);
+          if (document) {
+            results.push({
+              memory: document,
+              relevance: similarity,
+              confidence: similarity,
+              explanation: `Semantic match in chunk ${chunk.chunkIndex + 1}`,
+              chunkRelevance: similarity,
+              chunkIndex: chunk.chunkIndex,
+              similarityScore: similarity
+            });
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
+  private async keywordDocumentSearch(query: string, limit: number, threshold: number): Promise<DocumentSearchResult[]> {
+    const queryLower = query.toLowerCase();
+    const results: DocumentSearchResult[] = [];
+
+    // Search through document chunks
+    for (const [chunkId, chunk] of this.documentChunks) {
+      const contentLower = chunk.content.toLowerCase();
+
+      // Simple keyword matching
+      const queryWords = queryLower.split(/\s+/);
+      let matchCount = 0;
+
+      for (const word of queryWords) {
+        if (word.length > 2 && contentLower.includes(word)) {
+          matchCount++;
+        }
+      }
+
+      const score = matchCount / queryWords.length;
+
+      if (score >= threshold) {
+        const document = this.documents.get(chunk.documentId);
+        if (document) {
+          results.push({
+            memory: document,
+            relevance: score,
+            confidence: score,
+            explanation: `Keyword match in chunk ${chunk.chunkIndex + 1}`,
+            chunkRelevance: score,
+            chunkIndex: chunk.chunkIndex,
+            similarityScore: score
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  private deduplicateDocumentResults(results: DocumentSearchResult[]): DocumentSearchResult[] {
+    const seen = new Set<string>();
+    return results.filter(result => {
+      const key = `${result.memory.id}-${result.chunkIndex}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private rankDocumentResults(results: DocumentSearchResult[], query: string): DocumentSearchResult[] {
+    return results.sort((a, b) => {
+      // Combine relevance with additional ranking factors
+      const aRank = a.relevance + this.calculateDocumentRelevance(a, query);
+      const bRank = b.relevance + this.calculateDocumentRelevance(b, query);
+      return bRank - aRank;
+    });
+  }
+
+  private calculateDocumentRelevance(result: DocumentSearchResult, query: string): number {
+    let relevance = 0;
+
+    // Boost for exact matches
+    if (result.memory.content.toLowerCase().includes(query.toLowerCase())) {
+      relevance += 0.2;
+    }
+
+    // Boost for recent documents
+    const daysOld = (Date.now() - result.memory.createdAt) / (1000 * 60 * 60 * 24);
+    if (daysOld < 7) relevance += 0.1; // Recent documents get boost
+
+    // Boost for higher importance
+    relevance += result.memory.importance * 0.1;
+
+    return relevance;
+  }
+
+  private generateHighlights(content: string, query: string): string[] {
+    const highlights: string[] = [];
+    const queryWords = query.toLowerCase().split(/\s+/);
+
+    for (const word of queryWords) {
+      if (word.length < 3) continue;
+
+      const regex = new RegExp(`\\b${word}\\w*`, 'gi');
+      const matches = content.match(regex);
+
+      if (matches) {
+        highlights.push(...matches.slice(0, 3)); // Limit highlights per word
+      }
+    }
+
+    return [...new Set(highlights)].slice(0, 5); // Unique highlights, max 5
+  }
+
+  private calculateChunkImportance(chunk: string, index: number, totalChunks: number): number {
+    let importance = 0.5; // Base importance
+
+    // First and last chunks are often more important
+    if (index === 0 || index === totalChunks - 1) {
+      importance += 0.2;
+    }
+
+    // Longer chunks might be more important
+    const lengthFactor = Math.min(chunk.length / 200, 0.2);
+    importance += lengthFactor;
+
+    return Math.min(importance, 1);
+  }
+
+  private generateDocumentId(): string {
+    return `doc_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
+  }
+
+  private generateChunkId(): string {
+    return `chunk_${Date.now()}_${crypto.randomBytes(8).toString('hex')}`;
   }
 }

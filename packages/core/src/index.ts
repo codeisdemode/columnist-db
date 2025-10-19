@@ -27,18 +27,23 @@ export type {
 
 export type { SyncOptions, SyncStatus, SyncEvent, ChangeSet } from './sync/base-adapter';
 
-// MCP and Memory AI features available but not exported in v1.2.3
-// Will be fully integrated in next major version
+// Memory AI features
 // export { ColumnistMCPServer } from './mcp';
 // export type { MCPConfig, MCPResource, MCPTool } from './mcp';
 
-// export { MemoryManager } from './memory';
-// export { MemoryMCPTools } from './memory';
-// export type { 
-//   MemoryRecord, 
-//   MemoryQueryOptions, 
-//   MemorySearchResult, 
-//   MemoryContext,
-//   MemoryImportanceScore,
-//   MemoryConsolidationConfig
-// } from './memory';
+export { MemoryManager, MemoryScoring, BasicEmbeddingProvider } from './memory';
+export type {
+  MemoryRecord,
+  MemoryQueryOptions,
+  MemorySearchResult,
+  SearchResult,
+  MemoryContext,
+  MemoryImportanceScore,
+  MemoryConsolidationConfig,
+  DocumentRecord,
+  DocumentChunk,
+  DocumentSearchOptions,
+  DocumentSearchResult,
+  EmbeddingProvider,
+  DocumentProcessingOptions
+} from './memory';

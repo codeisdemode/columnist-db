@@ -23,7 +23,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "columnist-db-core": "^1.1.0",
+    "columnist-db-core": "file:../core",
     "react": ">=16.8.0",
     "react-dom": ">=16.8.0"
   },

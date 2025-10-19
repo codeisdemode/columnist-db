@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { Columnist, type SchemaDefinition, type FindOptions, type SearchOptions, type InsertResult, type WhereCondition } from "columnist-db-core"
+import { MemoryManager, type DocumentSearchOptions, type DocumentSearchResult, type DocumentProcessingOptions, type EmbeddingProvider } from "columnist-db-core"
 
 export interface UseColumnistOptions {
   name: string
@@ -24,6 +25,14 @@ export interface UseColumnistResult<Schema extends SchemaDefinition = SchemaDefi
   getStats: (table?: string) => Promise<any>
   subscribe: (table: string, fn: (event: any) => void) => () => void
   transaction: (work: (tx: any) => Promise<void>) => Promise<void>
+  // Document processing methods
+  addDocument: (content: string, metadata?: Record<string, any>, options?: DocumentProcessingOptions) => Promise<string>
+  searchDocuments: (query: string, options?: DocumentSearchOptions) => Promise<DocumentSearchResult[]>
+  getDocumentChunks: (documentId: string) => Promise<any[]>
+  registerEmbeddingProvider: (provider: EmbeddingProvider) => void
+  unregisterEmbeddingProvider: () => void
+  hasEmbeddingProvider: () => boolean
+  getEmbeddingProviderInfo: () => { model: string; dimensions: number } | null
 }
 
 /**
@@ -50,6 +59,7 @@ export function useColumnist<Schema extends SchemaDefinition = SchemaDefinition>
   options: UseColumnistOptions
 ): UseColumnistResult<Schema> {
   const [db, setDb] = useState<any | null>(null)
+  const [memoryManager, setMemoryManager] = useState<MemoryManager | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
@@ -63,12 +73,18 @@ export function useColumnist<Schema extends SchemaDefinition = SchemaDefinition>
         setError(null)
         
         const instance = await Columnist.init(options.name, {
+          databaseName: options.name,
           schema: options.schema,
           version: options.version
         })
 
+        // Initialize memory manager
+        const manager = new MemoryManager(instance)
+        await manager.initialize()
+
         if (!cancelled) {
           setDb(instance)
+          setMemoryManager(manager)
         }
       } catch (err) {
         if (!cancelled) {
@@ -155,6 +171,49 @@ export function useColumnist<Schema extends SchemaDefinition = SchemaDefinition>
     return await db.transaction(work)
   }, [db])
 
+  // Document processing methods
+  const addDocument = useCallback(async (
+    content: string,
+    metadata?: Record<string, any>,
+    options?: DocumentProcessingOptions
+  ): Promise<string> => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    return await memoryManager.addDocument(content, metadata, options)
+  }, [memoryManager])
+
+  const searchDocuments = useCallback(async (
+    query: string,
+    options?: DocumentSearchOptions
+  ): Promise<DocumentSearchResult[]> => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    return await memoryManager.searchDocuments(query, options)
+  }, [memoryManager])
+
+  const getDocumentChunks = useCallback(async (documentId: string): Promise<any[]> => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    return await memoryManager.getDocumentChunks(documentId)
+  }, [memoryManager])
+
+  const registerEmbeddingProvider = useCallback((provider: EmbeddingProvider): void => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    memoryManager.registerEmbeddingProvider(provider)
+  }, [memoryManager])
+
+  const unregisterEmbeddingProvider = useCallback((): void => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    memoryManager.unregisterEmbeddingProvider()
+  }, [memoryManager])
+
+  const hasEmbeddingProvider = useCallback((): boolean => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    return memoryManager.hasEmbeddingProvider()
+  }, [memoryManager])
+
+  const getEmbeddingProviderInfo = useCallback((): { model: string; dimensions: number } | null => {
+    if (!memoryManager) throw new Error("Memory manager not initialized")
+    return memoryManager.getEmbeddingProviderInfo()
+  }, [memoryManager])
+
   const result = useMemo(() => ({
     db,
     isLoading,
@@ -168,21 +227,37 @@ export function useColumnist<Schema extends SchemaDefinition = SchemaDefinition>
     getAll,
     getStats,
     subscribe,
-    transaction
+    transaction,
+    // Document processing methods
+    addDocument,
+    searchDocuments,
+    getDocumentChunks,
+    registerEmbeddingProvider,
+    unregisterEmbeddingProvider,
+    hasEmbeddingProvider,
+    getEmbeddingProviderInfo
   }), [
-    db, 
-    isLoading, 
-    error, 
-    insert, 
-    update, 
-    deleteRecord, 
-    upsert, 
-    find, 
-    search, 
-    getAll, 
-    getStats, 
-    subscribe, 
-    transaction
+    db,
+    isLoading,
+    error,
+    insert,
+    update,
+    deleteRecord,
+    upsert,
+    find,
+    search,
+    getAll,
+    getStats,
+    subscribe,
+    transaction,
+    // Document processing methods
+    addDocument,
+    searchDocuments,
+    getDocumentChunks,
+    registerEmbeddingProvider,
+    unregisterEmbeddingProvider,
+    hasEmbeddingProvider,
+    getEmbeddingProviderInfo
   ])
 
   return result
