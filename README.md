@@ -5,7 +5,7 @@
 
 Columnist-DB is a high-performance client-side database engine optimized for AI applications, featuring columnar storage architecture, full-text search, vector similarity search, and seamless integration with LLMs through the Model Context Protocol (MCP). Built for production use with TypeScript-first development and enterprise-grade synchronization.
 
-## 🚀 Key Features
+## Key Features
 
 ### Database Engine Foundation
 - **Columnar Storage Architecture**: Optimized for analytical queries and vector operations with compression
@@ -31,7 +31,7 @@ Columnist-DB is a high-performance client-side database engine optimized for AI 
 - **Schema Evolution**: Type-safe schema migrations with versioning
 - **React Hooks**: Seamless integration with React applications
 
-## 🛠️ Quick Start
+## Quick Start
 
 ### Modular Installation
 
@@ -217,7 +217,7 @@ await mcp.store_research_paper({
 });
 ```
 
-## 🚀 Features
+## Features
 
 ### AI Memory Core
 - **Universal Content Storage**: Store any content type (conversations, documents, web, notes, custom)
@@ -242,12 +242,12 @@ await mcp.store_research_paper({
 - **Memory Export**: Export memory in JSON, CSV, and Markdown formats
 - **Memory Cleanup**: Selective clearing of memory by type or tags
 
-## 📋 Prerequisites
+## Prerequisites
 
 - Node.js 18+
 - Modern web browser with IndexedDB support
 
-## 🤖 MCP Server Setup
+## MCP Server Setup
 
 Columnist-DB provides specialized MCP servers for AI memory management:
 
@@ -287,7 +287,7 @@ Universal content storage for LLM context management:
 - `consolidate_memories` - Optimize and consolidate memory storage
 
 
-## 🔄 Multi-Device Sync Setup
+## Multi-Device Sync Setup
 
 Columnist-DB provides enterprise-grade synchronization for multi-device applications:
 
@@ -367,7 +367,7 @@ console.log('Sync status:', status);
 }
 ```
 
-## 📊 Performance Benchmarks
+## Performance Benchmarks
 
 ### Database Engine Performance
 - **Vector Search**: Query 100k embeddings in <50ms (browser)
@@ -380,7 +380,7 @@ console.log('Sync status:', status);
 - **Cross-Session Persistence**: Instant access to historical conversations
 - **Semantic Search**: Find related content across 10k+ items in <50ms
 
-## 🎯 Use Cases
+## Use Cases
 
 ### Database Engine Applications
 - **Analytics Dashboards**: Fast columnar queries for real-time analytics
@@ -409,7 +409,7 @@ console.log('Sync status:', status);
 - **Technical Documentation**: Store and retrieve technical knowledge
 - **Project Memory**: Remember project details and requirements
 
-## 🔧 Technical Architecture
+## Technical Architecture
 
 ### Core Database Engine
 - **Columnar Storage**: Optimized for vector operations and analytical queries
@@ -429,7 +429,7 @@ console.log('Sync status:', status);
 - **Context Management**: Intelligent context retrieval and ranking
 - **Memory Consolidation**: Automated memory optimization
 
-## 🆚 Why Columnist-DB?
+## Why Columnist-DB?
 
 ### Compared to Other Solutions
 
@@ -449,7 +449,7 @@ console.log('Sync status:', status);
 - **Flexible Architecture**: Use as database engine OR AI memory layer OR both
 - **Enterprise Ready**: Multi-device sync, conflict resolution, and schema evolution
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 columnist-db/
@@ -464,7 +464,7 @@ columnist-db/
 ```
 
 
-## 🚦 Development
+## Development
 
 ### Core Library Development
 ```bash
@@ -489,7 +489,7 @@ npm install columnist-db-ai-memory
 node node_modules/columnist-db-ai-memory/index.js
 ```
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions to both the core columnist-db library and the Research Assistant demo application. Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
 
@@ -500,13 +500,13 @@ We welcome contributions to both the core columnist-db library and the Research 
 - **Documentation**: API documentation and tutorials
 - **Testing**: Additional test coverage and examples
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🎯 Positioning: Database Engine First
+## Positioning: Database Engine First
 
 Columnist-DB is fundamentally a **database engine** that happens to excel at AI memory use cases. This positioning matters because:
 
@@ -522,4 +522,4 @@ Columnist-DB is fundamentally a **database engine** that happens to excel at AI 
 
 ---
 
-**Built with ❤️ - Columnist-DB: A production-grade columnar database engine optimized for AI applications and client-side data persistence.**
+Columnist-DB: A columnar database engine optimized for AI applications and client-side data persistence.**
