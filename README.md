@@ -16,6 +16,8 @@ It's built for local-first, offline-capable, and privacy-preserving AI applicati
 - **Columnar storage** for efficient analytical and vector operations
 - **Hybrid search**: combine full-text and vector similarity in one query
 - **Schema-based**: define and migrate collections with type safety
+- **Zod validation**: runtime schema validation with custom validators
+- **Device sync**: multi-device synchronization with Firebase, Supabase, and REST adapters
 - **Persistent**: stores data locally via IndexedDB (browser) or file (Node)
 - **Offline-first**: works without network access
 - **AI memory ready**: optimized for embeddings and LLM context retrieval
@@ -106,6 +108,75 @@ const results = await memoryManager.searchDocuments("machine learning", {
 });
 ```
 
+## Advanced Features
+
+### Zod Schema Validation
+
+```typescript
+import { z } from "zod";
+
+// Define custom validation schema
+const userSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  age: z.number().min(0).max(150),
+  preferences: z.object({
+    theme: z.enum(["light", "dark", "auto"]),
+    notifications: z.boolean()
+  })
+});
+
+const schema = {
+  users: {
+    id: { type: "string", primaryKey: true },
+    name: "string",
+    email: "string",
+    age: "number",
+    preferences: "json",
+    validation: userSchema // Custom Zod validation
+  }
+};
+
+const db = await Columnist.init("my-app", { schema });
+
+// Data will be validated against Zod schema
+await db.insert("users", {
+  id: "user_1",
+  name: "John Doe",
+  email: "john@example.com",
+  age: 30,
+  preferences: { theme: "dark", notifications: true }
+});
+```
+
+### Device Synchronization
+
+```typescript
+import { SyncManager, FirebaseSyncAdapter } from "columnist-db-core";
+
+// Initialize sync manager
+const syncManager = new SyncManager(db);
+await syncManager.initialize();
+
+// Register Firebase sync adapter
+const firebaseAdapter = new FirebaseSyncAdapter(db, {
+  apiKey: "your-api-key",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project-id",
+  realtime: true, // Enable real-time sync
+  conflictStrategy: "device-aware" // Smart conflict resolution
+});
+
+syncManager.registerAdapter("firebase", firebaseAdapter);
+
+// Start synchronization
+await syncManager.startAll();
+
+// Monitor sync status
+const status = syncManager.getAdapter("firebase")?.getStatus();
+console.log("Sync status:", status);
+```
+
 ## React Hooks
 
 ```typescript
@@ -156,6 +227,9 @@ function DocumentApp() {
 - **Semantic analytics dashboards**
 - **RAG applications** with local document processing
 - **Personal AI assistants** with persistent memory
+- **Multi-device sync** for collaborative applications
+- **Form validation** with runtime schema enforcement
+- **Enterprise apps** with offline capabilities
 
 ## Performance
 
