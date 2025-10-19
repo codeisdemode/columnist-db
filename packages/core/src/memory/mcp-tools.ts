@@ -2,7 +2,8 @@
 
 import { MCPServer } from '../mcp/sdk-minimal';
 import { ColumnistDB } from '../columnist';
-import { MemoryManager, MemoryQueryOptions, MemoryRecord } from './manager';
+import { MemoryManager } from './manager';
+import { MemoryQueryOptions, MemoryRecord } from './types';
 
 interface MemoryContext {
   currentTopic?: string;

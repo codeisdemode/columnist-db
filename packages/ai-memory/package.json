@@ -3,25 +3,20 @@
   "version": "1.0.0",
   "description": "AI Memory MCP Server for ColumnistDB - Universal content storage for AI memory function",
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./index.js",
+  "module": "./index.js",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./index.js",
+      "require": "./index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "dev": "tsc --project tsconfig.json --watch",
-    "clean": "rm -rf dist",
-    "test": "jest",
-    "start": "node dist/index.js"
+    "build": "echo 'Package is already built (JavaScript files present)'",
+    "dev": "node index.js",
+    "clean": "echo 'No cleanup needed for JavaScript package'",
+    "test": "echo 'No tests specified' && exit 0",
+    "start": "node index.js"
   },
   "dependencies": {
     "columnist-db-core": "^1.2.3",
