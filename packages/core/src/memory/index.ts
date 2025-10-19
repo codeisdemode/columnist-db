@@ -1,7 +1,7 @@
 // Memory AI Module Exports
 
 export { MemoryManager } from './manager';
-export { MemoryScorer } from './scoring';
+export { MemoryScoring } from './scoring';
 
 export type {
   MemoryRecord,

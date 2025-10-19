@@ -17,10 +17,17 @@ export class ColumnistMCPServer {
     this.config = config;
     this.adapter = new ColumnistNodeAdapter(config.databaseName);
     this.authManager = new AuthManager({
-      secret: config.authToken,
+      secret: config.authToken || 'default-secret-key',
       requireAuth: !!config.authToken
     });
-    this.securityManager = new SecurityManager();
+    this.securityManager = new SecurityManager({
+      maxConnectionsPerClient: 10,
+      maxQueryComplexity: 1000,
+      allowedTables: [], // Allow all tables by default
+      allowedOperations: ['query', 'search', 'insert'],
+      rateLimitWindowMs: 60000,
+      maxRequestsPerWindow: 100
+    });
     
     // Initialize MCP server with proper implementation
     this.server = new MCPServer({
@@ -102,7 +109,7 @@ export class ColumnistMCPServer {
 
   private async handleQuery(args: any, clientId: string = 'anonymous') {
     const { database, table, where, orderBy, limit, offset } = args;
-    
+
     if (database !== this.config.databaseName) {
       throw new Error(`Database ${database} not found`);
     }
@@ -112,7 +119,11 @@ export class ColumnistMCPServer {
       throw new Error(`Access to table ${table} is not allowed`);
     }
 
-    const queryValidation = this.securityManager.validateQuery(where);
+    if (!this.securityManager.isOperationAllowed('query')) {
+      throw new Error('Query operations are not allowed');
+    }
+
+    const queryValidation = await this.securityManager.validateQuery(where);
     if (!queryValidation.valid) {
       throw new Error(queryValidation.error);
     }
@@ -121,10 +132,15 @@ export class ColumnistMCPServer {
       throw new Error('Too many concurrent connections');
     }
 
+    if (!this.securityManager.checkRateLimit(clientId)) {
+      throw new Error('Rate limit exceeded');
+    }
+
     try {
-      const records = await this.adapter.query(table, { where, orderBy, limit, offset });
-      const sanitizedRecords = this.securityManager.sanitizeOutput(records);
-      
+      const sanitizedWhere = await this.securityManager.sanitizeInput(where);
+      const records = await this.adapter.query(table, { where: sanitizedWhere, orderBy, limit, offset });
+      const sanitizedRecords = await this.securityManager.sanitizeOutput(records);
+
       return {
         content: [{
           type: 'text',
@@ -138,7 +154,7 @@ export class ColumnistMCPServer {
 
   private async handleSearch(args: any, clientId: string = 'anonymous') {
     const { database, table, query, filters, limit } = args;
-    
+
     if (database !== this.config.databaseName) {
       throw new Error(`Database ${database} not found`);
     }
@@ -147,14 +163,24 @@ export class ColumnistMCPServer {
       throw new Error(`Access to table ${table} is not allowed`);
     }
 
+    if (!this.securityManager.isOperationAllowed('search')) {
+      throw new Error('Search operations are not allowed');
+    }
+
     if (!this.securityManager.checkConnection(clientId)) {
       throw new Error('Too many concurrent connections');
     }
 
+    if (!this.securityManager.checkRateLimit(clientId)) {
+      throw new Error('Rate limit exceeded');
+    }
+
     try {
-      const results = await this.adapter.search(table, query, { filters, limit });
-      const sanitizedResults = this.securityManager.sanitizeOutput(results);
-      
+      const sanitizedQuery = await this.securityManager.sanitizeInput(query);
+      const sanitizedFilters = await this.securityManager.sanitizeInput(filters);
+      const results = await this.adapter.search(table, sanitizedQuery, { filters: sanitizedFilters, limit });
+      const sanitizedResults = await this.securityManager.sanitizeOutput(results);
+
       return {
         content: [{
           type: 'text',
@@ -168,7 +194,7 @@ export class ColumnistMCPServer {
 
   private async handleInsert(args: any, clientId: string = 'anonymous') {
     const { database, table, records } = args;
-    
+
     if (database !== this.config.databaseName) {
       throw new Error(`Database ${database} not found`);
     }
@@ -185,9 +211,14 @@ export class ColumnistMCPServer {
       throw new Error('Too many concurrent connections');
     }
 
+    if (!this.securityManager.checkRateLimit(clientId)) {
+      throw new Error('Rate limit exceeded');
+    }
+
     try {
-      const result = await this.adapter.insert(table, records);
-      
+      const sanitizedRecords = await this.securityManager.sanitizeInput(records);
+      const result = await this.adapter.insert(table, sanitizedRecords);
+
       return {
         content: [{
           type: 'text',

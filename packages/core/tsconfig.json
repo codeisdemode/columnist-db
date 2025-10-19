@@ -5,5 +5,5 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "src/mcp/**/*", "src/memory/**/*"]
+  "exclude": ["dist", "node_modules"]
 }

@@ -2,8 +2,18 @@
 
 import { MCPServer } from '../mcp/sdk-minimal';
 import { ColumnistDB } from '../columnist';
-import { MemoryManager } from './manager';
-import { MemoryQueryOptions, MemoryContext } from './types';
+import { MemoryManager, MemoryQueryOptions, MemoryRecord } from './manager';
+
+interface MemoryContext {
+  currentTopic?: string;
+  recentMemories?: MemoryRecord[];
+  userPreferences?: Record<string, unknown>;
+  temporalContext?: {
+    timeOfDay?: string;
+    dayOfWeek?: string;
+    season?: string;
+  };
+}
 
 /**
  * MCP Tools for memory operations
@@ -32,7 +42,7 @@ export class MemoryMCPTools {
       },
       async ({ content, category, metadata }: any) => {
         try {
-          const memoryId = await this.memoryManager.storeMemory(content, category, metadata);
+          const memoryId = await this.memoryManager.storeMemory(content, 'text', { category, ...metadata });
           return {
             content: [{
               type: 'text',
@@ -71,18 +81,17 @@ export class MemoryMCPTools {
             limit,
             minImportance,
             category,
-            semanticSearch: query,
-            includeRelated: true
+            semanticSearch: query
           };
 
-          if (timeRange && typeof timeRange === 'object') {
-            const { start, end } = timeRange as any;
-            if (start && end) {
-              options.timeRange = [new Date(start), new Date(end)];
-            }
-          }
+          // Note: timeRange filtering not currently supported in MemoryQueryOptions
 
-          const results = await this.memoryManager.retrieveMemories(options);
+          const results = await this.memoryManager.searchMemories('', {
+            limit: options.limit || 10,
+            minImportance: options.minImportance,
+            category: options.category,
+            semanticSearch: options.semanticSearch
+          });
           
           if (results.length === 0) {
             return {
@@ -93,16 +102,15 @@ export class MemoryMCPTools {
             };
           }
 
-          const memoryTexts = results.map((result, index) => 
+          const memoryTexts = results.map((result, index) =>
             `\n--- Memory ${index + 1} ---\n` +
             `Content: ${result.memory.content}\n` +
             `Importance: ${result.memory.importance.toFixed(2)}\n` +
-            `Created: ${result.memory.timestamp.toLocaleString()}\n` +
+            `Created: ${new Date(result.memory.createdAt).toLocaleString()}\n` +
             `Access Count: ${result.memory.accessCount}\n` +
             `Relevance: ${result.relevance.toFixed(2)}\n` +
-            `Explanation: ${result.explanation}` +
-            (result.memory.category ? `\nCategory: ${result.memory.category}` : '') +
-            (result.memory._related ? `\nRelated Memories: ${result.memory._related.length} found` : '')
+            `Similarity: ${result.similarity.toFixed(2)}` +
+            (result.memory.category ? `\nCategory: ${result.memory.category}` : '')
           );
 
           return {
@@ -150,24 +158,18 @@ export class MemoryMCPTools {
           };
 
           // Get recent memories for context
-          const recent = await this.memoryManager.retrieveMemories({
-            limit: 5,
-            sortBy: 'recency'
-          });
+          const recent = await this.memoryManager.searchMemories('', { limit: 5 });
 
-          context.recentMemories = recent.map(r => r.memory);
+          context.recentMemories = recent.map(result => result.memory);
 
           // Search with context
-          const results = await this.memoryManager.retrieveContextualMemories(context, {
-            limit: 3,
-            includeRelated: true
-          });
+          const results = await this.memoryManager.retrieveContextualMemories(JSON.stringify(context), 3);
 
-          const resultTexts = results.map((result, index) => 
+          const resultTexts = results.map((result, index) =>
             `\n--- Contextual Memory ${index + 1} ---\n` +
             `Content: ${result.memory.content}\n` +
             `Contextual Relevance: ${result.relevance.toFixed(2)}\n` +
-            `Explanation: ${result.explanation}`
+            `Similarity: ${result.similarity.toFixed(2)}`
           );
 
           return {
@@ -195,7 +197,7 @@ export class MemoryMCPTools {
       {},
       async () => {
         try {
-          const result = await this.memoryManager.consolidateMemoriesWithMetadata();
+          const result = await this.memoryManager.consolidateMemoriesWithMetadata({});
           
           return {
             content: [{
