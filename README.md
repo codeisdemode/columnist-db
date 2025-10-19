@@ -244,11 +244,11 @@ On typical hardware:
 ## Roadmap
 
 - Vector index compression
-- Multi-store sync adapters (e.g., Firebase, Supabase)
 - WASM-accelerated similarity search
 - Query planner improvements
-- Model Context Protocol (MCP) server integration
-- Advanced embedding provider integrations
+- Additional sync adapters (AWS, Google Cloud, etc.)
+- Advanced vector index types (HNSW, IVFPQ)
+- Real-time collaborative editing
 
 ## License
 
