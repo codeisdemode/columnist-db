@@ -20,6 +20,13 @@ Columnist-DB is a high-performance client-side database engine optimized for AI 
 - **Cross-Session Persistence**: Memory persists across different LLM sessions
 - **Content Type Support**: Conversations, documents, web pages, notes, research papers, and custom types
 
+### RAG Database Integration
+- **Document Processing**: Automatic chunking with semantic, fixed, and recursive strategies
+- **Embedding Provider System**: Plugin architecture for custom AI models with fallback support
+- **Hybrid Document Search**: Combined semantic + keyword search with configurable thresholds
+- **React Hooks**: Specialized hooks for document management and RAG workflows
+- **Chunk Consolidation**: Automatic merging of similar document chunks
+
 ### MCP Integration
 - **Unified AI Memory MCP Server**: Single server with 16 memory tools for all content types
 - **Advanced Memory Features**: Contextual search, memory consolidation, export capabilities
@@ -55,6 +62,12 @@ npm install columnist-db-hooks
 #### RAG Database (Advanced)
 ```bash
 npm install rag-db
+```
+
+#### Document Processing (RAG Integration)
+```bash
+# Already included in columnist-db-core v1.2.3+
+# No additional installation required
 ```
 
 ### Database Engine Usage
@@ -129,6 +142,100 @@ function MyComponent() {
     </div>
   );
 }
+```
+
+### Document Processing (RAG Integration)
+
+Columnist-DB now includes built-in document processing for RAG workflows with automatic chunking and embedding generation:
+
+#### Document Processing with Memory Manager
+```typescript
+import { MemoryManager } from 'columnist-db-core';
+
+// Initialize memory manager
+const memoryManager = new MemoryManager(db);
+await memoryManager.initialize();
+
+// Add document with automatic chunking
+const documentId = await memoryManager.addDocument(
+  'Your long document content here...',
+  { category: 'research', tags: ['ai', 'ml'] },
+  {
+    chunkingStrategy: 'semantic', // semantic, fixed, or recursive
+    maxChunkSize: 500,
+    generateEmbeddings: true
+  }
+);
+
+// Search documents with hybrid search
+const results = await memoryManager.searchDocuments('machine learning', {
+  searchStrategy: 'hybrid', // hybrid, semantic, or keyword
+  similarityThreshold: 0.7,
+  includeHighlights: true
+});
+
+// Get document chunks
+const chunks = await memoryManager.getDocumentChunks(documentId);
+```
+
+#### React Hooks for Document Processing
+```typescript
+import {
+  useColumnist,
+  useDocumentSearch,
+  useDocumentManagement
+} from 'columnist-db-hooks';
+
+function DocumentApp() {
+  // Main database hook with document methods
+  const {
+    addDocument,
+    searchDocuments,
+    getDocumentChunks,
+    registerEmbeddingProvider
+  } = useColumnist({ name: 'my-app' });
+
+  // Specialized document search hook
+  const {
+    results,
+    isLoading,
+    search,
+    hasResults
+  } = useDocumentSearch({
+    memoryManager: memoryManager,
+    debounceMs: 300,
+    autoSearch: true
+  });
+
+  // Document state management hook
+  const {
+    documents,
+    addDocument: addDoc,
+    removeDocument
+  } = useDocumentManagement({
+    memoryManager: memoryManager,
+    autoLoadChunks: true
+  });
+
+  return (
+    <div>
+      {/* Document management UI */}
+    </div>
+  );
+}
+```
+
+#### Embedding Provider Registration
+```typescript
+import { BasicEmbeddingProvider } from 'columnist-db-core';
+
+// Register embedding provider
+const basicProvider = new BasicEmbeddingProvider();
+memoryManager.registerEmbeddingProvider(basicProvider);
+
+// Check provider status
+const hasProvider = memoryManager.hasEmbeddingProvider();
+const providerInfo = memoryManager.getEmbeddingProviderInfo();
 ```
 
 ### MCP Integration for AI Memory
@@ -455,6 +562,8 @@ console.log('Sync status:', status);
 columnist-db/
 ├── packages/              # Modular packages
 │   ├── core/             # Main database engine (columnist-db-core)
+│   │   └── src/memory/embedding-providers/
+│   │       └── basic-embedding-provider.ts
 │   ├── hooks/            # React hooks integration (columnist-db-hooks)
 │   ├── ai-memory/        # AI Memory MCP server (columnist-db-ai-memory)
 │   └── rag-db/           # RAG database with AI integration
