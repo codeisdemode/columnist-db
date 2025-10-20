@@ -249,6 +249,9 @@ On typical hardware:
 - Additional sync adapters (AWS, Google Cloud, etc.)
 - Advanced vector index types (HNSW, IVFPQ)
 - Real-time collaborative editing
+- Graph-based memory connections
+- Streaming data ingestion
+- Automated schema migrations
 
 ## License
 
