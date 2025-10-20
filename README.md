@@ -247,7 +247,7 @@ On typical hardware:
 - WASM-accelerated similarity search
 - Query planner improvements
 - Additional sync adapters (AWS, Google Cloud, etc.)
-- Advanced vector index types (HNSW, IVFPQ)
+- Advanced vector index types (IVFPQ)
 - Real-time collaborative editing
 - Graph-based memory connections
 - Streaming data ingestion
