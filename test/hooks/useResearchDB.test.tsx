@@ -5,8 +5,7 @@ import { getResearchDB } from '@/lib/database'
 
 // Mock the database module
 vi.mock('@/lib/database', () => ({
-  getResearchDB: vi.fn(),
-  generateEmbedding: vi.fn().mockImplementation(async () => [1, 2, 3, 4, 5])
+  getResearchDB: vi.fn()
 }))
 
 describe('useResearchDB', () => {

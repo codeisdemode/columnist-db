@@ -1,30 +1,37 @@
 import '@testing-library/jest-dom'
-
-// Mock IndexedDB for testing
 import { indexedDB, IDBKeyRange } from 'fake-indexeddb'
+import { webcrypto } from 'node:crypto'
+import { vi } from 'vitest'
 
-// Mock global IndexedDB for browser environment
-global.indexedDB = indexedDB as any
-global.IDBKeyRange = IDBKeyRange as any
+if (!globalThis.indexedDB) {
+  globalThis.indexedDB = indexedDB as unknown as IDBFactory
+}
 
-// Mock window.matchMedia for React components
+globalThis.IDBKeyRange = IDBKeyRange as unknown as typeof IDBKeyRange
+
+if (!globalThis.crypto || !(globalThis.crypto as Crypto).subtle) {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: webcrypto,
+    configurable: true,
+  })
+}
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation(query => ({
+  value: vi.fn().mockImplementation((query: string) => ({
     matches: false,
     media: query,
     onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
 })
 
-// Mock ResizeObserver for React components
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),
-}))
+})) as unknown as typeof ResizeObserver

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getResearchDB, Paper, Note, generateEmbedding } from '@/lib/database';
+import { getResearchDB, Paper, Note } from '@/lib/database';
 
 export function useResearchDB() {
   const [isLoading, setIsLoading] = useState(true);
@@ -10,19 +10,12 @@ export function useResearchDB() {
   useEffect(() => {
     const initializeDB = async () => {
       try {
-        // Only initialize on client side
         if (typeof window === 'undefined') {
           setIsLoading(false);
           return;
         }
 
-        console.log('Initializing database in browser environment...');
-        console.log('Window available:', typeof window !== 'undefined');
-        console.log('IndexedDB available:', typeof indexedDB !== 'undefined');
-
-        // Initialize the database on first use
         const db = await getResearchDB();
-        console.log('Database initialized successfully:', db);
         setIsLoading(false);
       } catch (err) {
         console.error('Database initialization failed:', err);
@@ -43,7 +36,7 @@ export function useResearchDB() {
     initializeDB();
   }, []);
 
-  const addPaper = async (paperData: Omit<Paper, 'id' | 'createdAt' | 'updatedAt' | 'vectorEmbedding'> & { authors?: string | string[]; tags?: string | string[] }) => {
+  const addPaper = async (paperData: Omit<Paper, 'id' | 'createdAt' | 'updatedAt'> & { authors?: string | string[]; tags?: string | string[] }) => {
     try {
       if (typeof window === 'undefined') {
         throw new Error('Database operations are only available in browser environment');
@@ -63,7 +56,6 @@ export function useResearchDB() {
         updatedAt: new Date(),
         authors: Array.isArray(paperData.authors) ? paperData.authors.join(', ') : paperData.authors,
         tags: Array.isArray(paperData.tags) ? paperData.tags.join(', ') : paperData.tags,
-        vectorEmbedding: await generateEmbedding(`${paperData.title} ${paperData.abstract}`)
       };
 
       await db.insert(paper, 'papers');
@@ -113,22 +105,15 @@ export function useResearchDB() {
         return [];
       }
 
-      console.log('Searching for:', query);
-
       // First try searching with just the table
       let results = await db.search(query, {
         table: 'papers'
       });
 
-      console.log('Basic search results:', results);
-
       // If no results, try using the find method as an alternative
       if (results.length === 0 && typeof db.find === 'function') {
-        console.log('Trying find method as alternative...');
-
         // Get all papers and filter manually
         const allPapers = await db.getAll('papers');
-        console.log('All papers:', allPapers);
 
         // Simple text search across title and abstract
         const searchTerm = query.toLowerCase();
@@ -138,7 +123,6 @@ export function useResearchDB() {
             paper.abstract?.toLowerCase().includes(searchTerm)
           );
         });
-        console.log('Manual search results:', results);
       }
 
       return results as Paper[];

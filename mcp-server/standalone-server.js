@@ -1,22 +1,20 @@
 #!/usr/bin/env node
 
-/**
- * Standalone Research Assistant MCP Server
- *
- * This is a simplified version that implements the MCP protocol directly
- * without relying on columnist-db-core's MCP implementation.
- */
-
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  ToolSchema
 } from '@modelcontextprotocol/sdk/types.js';
+
+import { Columnist } from 'columnist-db-core';
+
+const DEFAULT_DB_NAME = 'research-assistant-mcp';
 
 class ResearchAssistantMCPServer {
   constructor() {
+    this.dbReady = this.initializeDatabase();
+
     this.server = new Server(
       {
         name: 'research-assistant-mcp-server',
@@ -24,21 +22,51 @@ class ResearchAssistantMCPServer {
       },
       {
         capabilities: {
-          tools: {}
-        }
+          tools: {},
+        },
       }
     );
 
     this.setupHandlers();
   }
 
+  async initializeDatabase() {
+    const db = await Columnist.init(DEFAULT_DB_NAME, {
+      autoInitialize: false,
+      schema: {
+        papers: {
+          columns: {
+            id: 'number',
+            title: 'string',
+            authors: 'string',
+            abstract: 'string',
+            publicationDate: 'date',
+            tagString: 'string',
+            tags: 'json',
+            url: 'string',
+            createdAt: 'date',
+            updatedAt: 'date',
+          },
+          primaryKey: 'id',
+          searchableFields: ['title', 'authors', 'abstract', 'tagString'],
+          secondaryIndexes: ['publicationDate'],
+        },
+      },
+    });
+
+    return db;
+  }
+
+  async getDb() {
+    return this.dbReady;
+  }
+
   setupHandlers() {
-    // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
           name: 'add_research_paper',
-          description: 'Add a new research paper to the database',
+          description: 'Add a new research paper to the local ColumnistDB instance',
           inputSchema: {
             type: 'object',
             properties: {
@@ -46,46 +74,45 @@ class ResearchAssistantMCPServer {
               authors: { type: 'string', description: 'Comma-separated list of authors' },
               abstract: { type: 'string', description: 'Paper abstract' },
               publication_date: { type: 'string', description: 'Publication date (YYYY-MM-DD)' },
-              tags: { type: 'string', description: 'Comma-separated tags' },
-              url: { type: 'string', description: 'Paper URL (optional)' }
+              tags: { type: 'string', description: 'Comma-separated tags', optional: true },
+              url: { type: 'string', description: 'Paper URL (optional)' },
             },
-            required: ['title', 'authors', 'abstract', 'publication_date']
-          }
+            required: ['title', 'authors', 'abstract', 'publication_date'],
+          },
         },
         {
           name: 'search_papers',
-          description: 'Search research papers by title, abstract, authors, or tags',
+          description: 'Search stored research papers by title, abstract, or authors',
           inputSchema: {
             type: 'object',
             properties: {
               query: { type: 'string', description: 'Search query' },
-              limit: { type: 'number', description: 'Maximum number of results', optional: true }
+              limit: { type: 'number', description: 'Maximum number of results', optional: true },
             },
-            required: ['query']
-          }
+            required: ['query'],
+          },
         },
         {
           name: 'get_research_summary',
-          description: 'Get a summary of research progress and statistics',
+          description: 'Summarise the stored research corpus with live metrics',
           inputSchema: {
             type: 'object',
-            properties: {}
-          }
-        }
-      ]
+            properties: {},
+          },
+        },
+      ],
     }));
 
-    // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
+    this.server.setRequestHandler(CallToolRequestSchema, async request => {
+      const { name, arguments: args = {} } = request.params;
 
       switch (name) {
         case 'add_research_paper':
-          return await this.handleAddResearchPaper(args);
+          return this.handleAddResearchPaper(args);
         case 'search_papers':
-          return await this.handleSearchPapers(args);
+          return this.handleSearchPapers(args);
         case 'get_research_summary':
-          return await this.handleGetResearchSummary(args);
+          return this.handleGetResearchSummary();
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
@@ -93,85 +120,153 @@ class ResearchAssistantMCPServer {
   }
 
   async handleAddResearchPaper(args) {
-    const { title, authors, abstract, publication_date, tags, url } = args;
+    const db = await this.getDb();
 
-    // Simulate database operation
-    const paper = {
-      id: 'paper_' + Date.now(),
+    const {
       title,
       authors,
       abstract,
-      publicationDate: publication_date,
-      tags: tags || '',
-      url: url || '',
-      createdAt: new Date().toISOString()
+      publication_date: publicationDate,
+      tags = '',
+      url = '',
+    } = args;
+
+    const tagList = tags
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean);
+
+    const now = new Date();
+    const record = {
+      title,
+      authors,
+      abstract,
+      publicationDate: publicationDate ? new Date(publicationDate) : now,
+      tagString: tagList.join(', '),
+      tags: tagList,
+      url,
+      createdAt: now,
+      updatedAt: now,
     };
 
+    const { id } = await db.insert(record, 'papers');
+
     return {
-      content: [{
-        type: 'text',
-        text: `Paper "${title}" added successfully with ID: ${paper.id}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Stored "${title}" with id ${id}. ${tagList.length ? `Tags: ${tagList.join(', ')}` : 'No tags supplied.'}`,
+        },
+      ],
     };
   }
 
   async handleSearchPapers(args) {
-    const { query, limit = 10 } = args;
+    const db = await this.getDb();
+    const { query, limit = 5 } = args;
 
-    // Simulate search operation
-    const mockResults = [
-      {
-        id: 'paper_1',
-        title: 'Machine Learning in Healthcare',
-        authors: 'John Smith, Jane Doe',
-        abstract: 'This paper explores the application of machine learning algorithms in healthcare diagnostics.',
-        publicationDate: '2024-01-15',
-        tags: 'machine-learning, healthcare, ai'
-      }
-    ];
+    const rawResults = await db.search(query, {
+      table: 'papers',
+      limit: limit * 2,
+    });
 
-    const filteredResults = mockResults.filter(paper =>
-      paper.title.toLowerCase().includes(query.toLowerCase()) ||
-      paper.abstract.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, limit);
-
-    if (filteredResults.length === 0) {
+    if (rawResults.length === 0) {
       return {
-        content: [{
-          type: 'text',
-          text: `No papers found matching "${query}"`
-        }]
+        content: [
+          {
+            type: 'text',
+            text: `No papers found matching "${query}".`,
+          },
+        ],
       };
     }
 
-    const resultText = filteredResults.map((paper, index) =>
-      `${index + 1}. ${paper.title}\n   Authors: ${paper.authors}\n   ID: ${paper.id}`
-    ).join('\n\n');
+    const results = rawResults.slice(0, limit).map((paper, index) => {
+      const published = paper.publicationDate
+        ? new Date(paper.publicationDate).toISOString().split('T')[0]
+        : 'Unknown';
+      const tags = (paper.tags || [])
+        .map(tag => tag.toString())
+        .filter(Boolean)
+        .join(', ');
+      return `${index + 1}. ${paper.title}\n   Authors: ${paper.authors}\n   Published: ${published}\n   Tags: ${tags || '—'}`;
+    });
 
     return {
-      content: [{
-        type: 'text',
-        text: `Found ${filteredResults.length} papers:\n\n${resultText}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Found ${rawResults.length} result(s) for "${query}":\n\n${results.join('\n\n')}`,
+        },
+      ],
     };
   }
 
-  async handleGetResearchSummary(args) {
-    // Simulate summary data
-    const summary = `
-Research Summary:
-- Total Papers: 5
-- Total Notes: 12
-- Most Recent Paper: Machine Learning in Healthcare
-- Papers with Notes: 3
-- Average Notes per Paper: 2.4
-    `.trim();
+  async handleGetResearchSummary() {
+    const db = await this.getDb();
+    const papers = await db.getAll('papers', Number.MAX_SAFE_INTEGER);
+
+    if (papers.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No research papers have been stored yet.',
+          },
+        ],
+      };
+    }
+
+    const mostRecent = papers
+      .slice()
+      .sort((a, b) => new Date(b.publicationDate || 0).valueOf() - new Date(a.publicationDate || 0).valueOf())[0];
+
+    const tagFrequency = new Map();
+    const authorFrequency = new Map();
+
+    for (const paper of papers) {
+      const tags = (paper.tags || [])
+        .map(tag => tag.toString())
+        .filter(Boolean);
+      for (const tag of tags) {
+        tagFrequency.set(tag, (tagFrequency.get(tag) || 0) + 1);
+      }
+
+      const authorList = paper.authors.split(',').map(name => name.trim());
+      for (const author of authorList) {
+        if (author) {
+          authorFrequency.set(author, (authorFrequency.get(author) || 0) + 1);
+        }
+      }
+    }
+
+    const topTags = Array.from(tagFrequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag, count]) => `${tag} (${count})`)
+      .join(', ');
+
+    const prolificAuthors = Array.from(authorFrequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([author, count]) => `${author} (${count})`)
+      .join(', ');
+
+    const summary = [
+      `Total papers: ${papers.length}`,
+      `Most recent: ${mostRecent.title} (${new Date(mostRecent.publicationDate || mostRecent.createdAt).toISOString().split('T')[0]})`,
+      `Unique tags: ${tagFrequency.size}`,
+      `Top tags: ${topTags || '—'}`,
+      `Most prolific authors: ${prolificAuthors || '—'}`,
+    ].join('\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: summary
-      }]
+      content: [
+        {
+          type: 'text',
+          text: summary,
+        },
+      ],
     };
   }
 
@@ -182,7 +277,6 @@ Research Summary:
   }
 }
 
-// CLI interface
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new ResearchAssistantMCPServer();
 
@@ -191,8 +285,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 
-  // Graceful shutdown
-  process.on('SIGINT', async () => {
+  process.on('SIGINT', () => {
     console.error('\nShutting down MCP server...');
     process.exit(0);
   });

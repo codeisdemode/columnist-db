@@ -58,15 +58,17 @@ export const papersTable = defineTable()
   .column('publicationDate', 'date')
   .column('tags', 'string') // String format for better search
   .searchable('title', 'abstract', 'authors', 'tags')
-  .vector({ field: 'vectorEmbedding', dims: 50 })
+  .vector({ field: 'abstract', dims: 128 })
   .build();
 ```
 
 ### Search Implementation
 - **Inverted indexes**: Built during insertion for fast search
-- **TF-IDF scoring**: Relevance-based result ranking
+- **TF-IDF scoring**: Relevance-based result ranking blended with semantic vectors
+- **Vector embeddings**: Client-side BasicEmbeddingProvider caches 128-d vectors per abstract
 - **Fallback mechanism**: Manual filtering when search fails
-- **Debug logging**: Comprehensive search diagnostics
+- **Structured telemetry**: Cache size and model metadata exposed for UI display
+- **Configurable caching**: Tune cache TTL and entry limits per deployment for predictable performance
 
 ### MCP Server Architecture
 - **Protocol compliance**: Full MCP specification implementation
@@ -108,7 +110,7 @@ export const papersTable = defineTable()
 ## 🔮 Future Enhancement Possibilities
 
 ### Immediate Extensions
-1. **Vector search integration** - Semantic similarity search
+1. **Multi-adapter sync** - Wire REST, Firebase, and Supabase replication configs
 2. **Collaborative features** - Multi-user research management
 3. **Import/export enhancements** - More format support
 4. **Advanced analytics** - Research trend visualization
@@ -130,7 +132,7 @@ export const papersTable = defineTable()
 - ✅ **User Experience**: Intuitive interface and workflows
 
 ### Areas for Optimization
-- 🔄 **Vector search**: Currently placeholder implementation
+- 🔄 **Sync adapters**: Provide production REST/Firebase/Supabase examples
 - 🔄 **Advanced analytics**: Basic summary features
 - 🔄 **Multi-user support**: Single-user focused currently
 
