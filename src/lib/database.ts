@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { Columnist, defineTable } from 'columnist-db-core';
+import { Columnist, defineTable, BasicEmbeddingProvider } from 'columnist-db-core';
+
+const EMBEDDING_DIMENSIONS = 128;
 
 // Define table schemas using the columnist-db API
 export const papersTable = defineTable()
@@ -9,12 +11,11 @@ export const papersTable = defineTable()
   .column('abstract', 'string')
   .column('publicationDate', 'date')
   .column('tags', 'string') // Change from string[] to string for better search compatibility
-  .column('vectorEmbedding', 'json')
   .column('createdAt', 'date')
   .column('updatedAt', 'date')
   .primaryKey('id')
   .searchable('title', 'abstract', 'authors', 'tags')
-  .vector({ field: 'vectorEmbedding', dims: 50 })
+  .vector({ field: 'abstract', dims: EMBEDDING_DIMENSIONS })
   .validate(z.object({
     id: z.string(),
     title: z.string(),
@@ -22,7 +23,6 @@ export const papersTable = defineTable()
     abstract: z.string(),
     publicationDate: z.date(),
     tags: z.string(), // Change from z.array(z.string()) to z.string()
-    vectorEmbedding: z.array(z.number()).optional(),
     createdAt: z.date(),
     updatedAt: z.date()
   }))
@@ -60,7 +60,6 @@ export type Paper = {
   abstract: string;
   publicationDate: Date;
   tags: string; // Changed from string[] to string
-  vectorEmbedding?: number[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -74,85 +73,109 @@ export type Note = {
   updatedAt: Date;
 };
 
-// Database initialization - lazy initialization to avoid SSR issues
-let researchDBInstance: any = null;
+type ResolvedEmbeddingProvider = {
+  generateEmbedding: (text: string) => Promise<Float32Array>;
+  dimensions: number;
+  model: string;
+};
+
+let embeddingProvider: ResolvedEmbeddingProvider | null = null;
+const embeddingCache = new Map<string, Float32Array>();
+let researchDBPromise: Promise<any> | null = null;
+
+function ensureEmbeddingProvider(): ResolvedEmbeddingProvider {
+  if (!embeddingProvider) {
+    const provider = new BasicEmbeddingProvider();
+    embeddingProvider = {
+      generateEmbedding: (text: string) => provider.generateEmbedding(text),
+      dimensions: provider.getDimensions(),
+      model: provider.getModel(),
+    };
+  }
+
+  if (embeddingProvider.dimensions !== EMBEDDING_DIMENSIONS) {
+    throw new Error(`Embedding provider dimension mismatch. Expected ${EMBEDDING_DIMENSIONS}, received ${embeddingProvider.dimensions}`);
+  }
+
+  return embeddingProvider;
+}
+
+async function getCachedEmbedding(text: string): Promise<Float32Array> {
+  const provider = ensureEmbeddingProvider();
+  const key = text.trim();
+
+  if (!key) {
+    return new Float32Array(provider.dimensions);
+  }
+
+  const cached = embeddingCache.get(key);
+  if (cached) {
+    return new Float32Array(cached);
+  }
+
+  const vector = await provider.generateEmbedding(text);
+  if (!(vector instanceof Float32Array) || vector.length !== provider.dimensions) {
+    throw new Error(`Embedding provider returned vector with dimension ${vector.length}, expected ${provider.dimensions}`);
+  }
+
+  const stored = new Float32Array(vector);
+  embeddingCache.set(key, stored);
+  return new Float32Array(stored);
+}
+
+export const setEmbeddingProvider = (provider: {
+  generateEmbedding(text: string): Promise<Float32Array>;
+  getDimensions(): number;
+  getModel?(): string;
+}): void => {
+  const dimensions = provider.getDimensions();
+  if (dimensions !== EMBEDDING_DIMENSIONS) {
+    throw new Error(`Custom embedding provider must use ${EMBEDDING_DIMENSIONS}-dimension vectors to match the schema.`);
+  }
+
+  embeddingProvider = {
+    generateEmbedding: (text: string) => provider.generateEmbedding(text),
+    dimensions,
+    model: typeof provider.getModel === 'function' ? provider.getModel() : 'custom-provider',
+  };
+  embeddingCache.clear();
+};
 
 export const getResearchDB = async () => {
   if (typeof window === 'undefined') {
     throw new Error('Database is only available in browser environment');
   }
 
-  if (!researchDBInstance) {
-    try {
-      console.log('Attempting to initialize Columnist database...');
-      console.log('Papers table schema:', papersTable);
-      console.log('Notes table schema:', notesTable);
-
-      researchDBInstance = await Columnist.init('research-assistant', {
+  if (!researchDBPromise) {
+    researchDBPromise = (async () => {
+      const db = await Columnist.init('research-assistant', {
         version: 1,
         schema: {
           papers: papersTable,
-          notes: notesTable
-        }
+          notes: notesTable,
+        },
       });
-      console.log('Columnist database initialized successfully:', researchDBInstance);
-      console.log('Database methods:', Object.keys(researchDBInstance));
 
-      // Check if search method exists and test it
-      if (typeof researchDBInstance.search === 'function') {
-        console.log('Search method is available');
-      } else {
-        console.log('Search method is NOT available');
-      }
-    } catch (error) {
-      console.error('Failed to initialize Columnist database:', error);
+      ensureEmbeddingProvider();
+      db.registerEmbedder('papers', async (text: string) => getCachedEmbedding(text));
 
-      // Create a simple in-memory fallback
-      researchDBInstance = {
-        insert: async (record: any, table: string) => {
-          console.log('In-memory insert:', table, record);
-          return { id: record.id || crypto.randomUUID() };
-        },
-        getAll: async (table: string, limit?: number) => {
-          console.log('In-memory getAll:', table);
-          return [];
-        },
-        search: async (query: string, options?: any) => {
-          console.log('In-memory search:', query, options);
-          return [];
-        },
-        find: async (options: any) => {
-          console.log('In-memory find:', options);
-          return [];
-        },
-        delete: async (id: string, table: string) => {
-          console.log('In-memory delete:', table, id);
-        }
-      };
-
-      console.warn('Using in-memory fallback database. Data will not persist.');
-    }
+      return db;
+    })();
   }
 
-  return researchDBInstance;
+  return researchDBPromise;
 };
 
-// Helper function to generate embeddings (placeholder implementation)
 export const generateEmbedding = async (text: string): Promise<number[]> => {
-  // Simple word frequency-based embedding as placeholder
-  // In production, this would use OpenAI API or similar
-  const words = text.toLowerCase().split(/\s+/);
-  const wordCounts = new Map<string, number>();
+  const vector = await getCachedEmbedding(text);
+  return Array.from(vector);
+};
 
-  words.forEach(word => {
-    wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
-  });
-
-  // Create a simple embedding vector
-  const embedding = Array.from({ length: 50 }, (_, i) => {
-    const word = `word${i}`;
-    return wordCounts.get(word) || 0;
-  });
-
-  return embedding;
+export const getEmbeddingMetadata = () => {
+  const provider = ensureEmbeddingProvider();
+  return {
+    model: provider.model,
+    dimensions: provider.dimensions,
+    cacheSize: embeddingCache.size,
+  };
 };

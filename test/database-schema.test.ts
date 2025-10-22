@@ -10,7 +10,6 @@ describe('Database Schema Validation', () => {
     abstract: z.string(),
     publicationDate: z.date(),
     tags: z.string(),
-    vectorEmbedding: z.array(z.number()).optional(),
     createdAt: z.date(),
     updatedAt: z.date()
   })
@@ -33,7 +32,6 @@ describe('Database Schema Validation', () => {
         abstract: 'Test abstract',
         publicationDate: new Date(),
         tags: 'test, paper',
-        vectorEmbedding: [1, 2, 3],
         createdAt: new Date(),
         updatedAt: new Date()
       }
@@ -58,8 +56,8 @@ describe('Database Schema Validation', () => {
       expect(result.success).toBe(false)
     })
 
-    it('should handle optional vector embedding', () => {
-      const paperWithoutEmbedding = {
+    it('should trim unexpected fields', () => {
+      const paperWithExtraField = {
         id: 'test-id',
         title: 'Test Paper',
         authors: 'Test Author',
@@ -67,11 +65,12 @@ describe('Database Schema Validation', () => {
         publicationDate: new Date(),
         tags: 'test, paper',
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        extra: 'ignore-me'
       }
 
-      const result = paperSchema.safeParse(paperWithoutEmbedding)
-      expect(result.success).toBe(true)
+      const result = paperSchema.safeParse(paperWithExtraField)
+      expect(result.success).toBe(false)
     })
   })
 

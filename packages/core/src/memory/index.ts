@@ -2,6 +2,12 @@
 
 export { MemoryManager } from './manager';
 export { MemoryScoring } from './scoring';
+export type {
+  MemoryScoringConfig,
+  MemoryRelevanceContext,
+  MemoryImportanceContext,
+  MemoryUpdateContext
+} from './scoring';
 export { BasicEmbeddingProvider } from './embedding-providers/basic-embedding-provider';
 
 export type {

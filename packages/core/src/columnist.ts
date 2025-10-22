@@ -343,6 +343,8 @@ const META_SCHEMA_STORE = "_meta_schema"
 const META_STATS_STORE = "_meta_stats"
 const DEFAULT_TABLE = "messages"
 
+const SENSITIVE_FIELD_PATTERNS = [/password/i, /secret/i, /key/i, /token/i, /auth/i]
+
 // Utility to wrap IDBRequest in a Promise
 function requestToPromise<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -642,9 +644,11 @@ export interface TypedColumnistDB<Schema extends SchemaDefinition> {
   
   // Get all with proper typing
   getAll<K extends keyof Schema>(
-    table: K, 
+    table: K,
     limit?: number
   ): Promise<InferTableType<Schema[K]>[]>
+
+  getOptions(): Readonly<ColumnistDBOptions>
 }
 
 export class ColumnistDBError extends Error {
@@ -805,17 +809,23 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       ...opts
     };
     const instance = new ColumnistDB(name, schema, version, defaultOptions, opts?.migrations)
+
+    const syncEnabled = opts?.sync?.enabled === true
+
+    if (syncEnabled && opts?.sync?.autoRegisterDevices !== false) {
+      instance.ensureDeviceTableSchema()
+    }
+
     await instance.load()
-    
+
     // Initialize encryption if key provided
     if (opts?.encryptionKey) {
       await instance.setEncryptionKey(opts.encryptionKey)
     }
-    
+
     // Auto-initialize device tables if sync is enabled
-    if (opts?.sync?.enabled !== false && opts?.sync?.autoRegisterDevices !== false) {
-      // TODO: Re-implement ensureDeviceTables method
-      // await instance.ensureDeviceTables()
+    if (syncEnabled && opts?.sync?.autoRegisterDevices !== false) {
+      await instance.ensureDeviceTables()
     }
     
     ColumnistDB.#instance = instance
@@ -838,6 +848,52 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   getSchema(): SchemaDefinition {
     return this.schema
+  }
+
+  getOptions(): Readonly<ColumnistDBOptions> {
+    const cloned: ColumnistDBOptions = {
+      ...this.options,
+      sync: this.options.sync ? { ...this.options.sync } : undefined,
+      vectorSearch: this.options.vectorSearch ? { ...this.options.vectorSearch } : undefined,
+      tables: this.options.tables ? { ...this.options.tables } : undefined
+    }
+
+    return Object.freeze(cloned)
+  }
+
+  private ensureDeviceTableSchema(): void {
+    if (this.schema.devices) {
+      return
+    }
+
+    this.schema = {
+      ...this.schema,
+      devices: DeviceTableSchema
+    }
+  }
+
+  private async ensureDeviceTables(): Promise<void> {
+    if (!this.schema.devices) {
+      return
+    }
+
+    if (this.useInMemory) {
+      this.inMemoryStorage?.createStore('devices')
+      this.inMemoryStorage?.createStore(indexStoreName('devices'))
+      return
+    }
+
+    if (!this.db) {
+      return
+    }
+
+    if (this.db.objectStoreNames.contains('devices')) {
+      return
+    }
+
+    this.db.close()
+    this.version += 1
+    await this.load()
   }
 
   async load(): Promise<void> {
@@ -2605,41 +2661,21 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
     }
 
     // Generate random salt if not provided
-    const encoder = new TextEncoder()
     const finalSalt = salt || window.crypto.getRandomValues(new Uint8Array(16))
 
     // Store salt for later use in key rotation
     this.encryptionSalt = finalSalt
 
-    // Derive key from password using PBKDF2
-    const keyMaterial = await window.crypto.subtle.importKey(
-      'raw',
-      encoder.encode(key),
-      'PBKDF2',
-      false,
-      ['deriveKey']
-    )
-
-    this.encryptionKey = await window.crypto.subtle.deriveKey(
-      {
-        name: 'PBKDF2',
-        salt: new Uint8Array(finalSalt).buffer,
-        iterations: 310000, // OWASP recommended minimum
-        hash: 'SHA-256'
-      },
-      keyMaterial,
-      {
-        name: 'AES-GCM',
-        length: 256
-      },
-      false,
-      ['encrypt', 'decrypt']
-    )
+    this.encryptionKey = await this.deriveEncryptionKey(key, finalSalt)
   }
 
   private async encryptData(data: string): Promise<string> {
     if (!this.encryptionKey) return data
 
+    return this.encryptDataWithKey(data, this.encryptionKey)
+  }
+
+  private async encryptDataWithKey(data: string, key: CryptoKey): Promise<string> {
     try {
       const encoder = new TextEncoder()
       const iv = window.crypto.getRandomValues(new Uint8Array(12))
@@ -2648,7 +2684,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           name: 'AES-GCM',
           iv: iv
         },
-        this.encryptionKey,
+        key,
         encoder.encode(data)
       )
 
@@ -2666,6 +2702,10 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
   private async decryptData(encryptedData: string): Promise<string> {
     if (!this.encryptionKey) return encryptedData
 
+    return this.decryptDataWithKey(encryptedData, this.encryptionKey)
+  }
+
+  private async decryptDataWithKey(encryptedData: string, key: CryptoKey): Promise<string> {
     try {
       // Validate encrypted data format
       if (!encryptedData || typeof encryptedData !== 'string') {
@@ -2687,7 +2727,7 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
           name: 'AES-GCM',
           iv: iv
         },
-        this.encryptionKey,
+        key,
         data
       )
 
@@ -2700,31 +2740,125 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   // Key rotation method
   async rotateEncryptionKey(newKey: string): Promise<void> {
-    if (!this.encryptionKey) {
+    if (!this.encryptionKey || !this.encryptionSalt) {
       throw new Error('No current encryption key set')
     }
 
-    // Generate new salt for the new key
     const newSalt = window.crypto.getRandomValues(new Uint8Array(16))
-
-    // Store old key and salt temporarily for re-encryption
     const oldKey = this.encryptionKey
     const oldSalt = this.encryptionSalt
 
     try {
-      // Set up new key
-      await this.setEncryptionKey(newKey, newSalt)
-
-      // TODO: Implement data re-encryption logic here
-      // This would iterate through all encrypted fields and re-encrypt them with the new key
-      console.warn('Key rotation completed. Data re-encryption not yet implemented.')
-
+      const derivedNewKey = await this.deriveEncryptionKey(newKey, newSalt)
+      await this.reencryptSensitiveData(oldKey, derivedNewKey)
+      this.encryptionKey = derivedNewKey
+      this.encryptionSalt = newSalt
     } catch (error) {
-      // Restore old key on failure
       this.encryptionKey = oldKey
       this.encryptionSalt = oldSalt
       throw new Error(`Key rotation failed: ${error instanceof Error ? error.message : String(error)}`)
     }
+  }
+
+  private async deriveEncryptionKey(key: string, salt: Uint8Array): Promise<CryptoKey> {
+    const encoder = new TextEncoder()
+    const keyMaterial = await window.crypto.subtle.importKey(
+      'raw',
+      encoder.encode(key),
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    )
+
+    return window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: new Uint8Array(salt).buffer,
+        iterations: 310000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      {
+        name: 'AES-GCM',
+        length: 256
+      },
+      false,
+      ['encrypt', 'decrypt']
+    )
+  }
+
+  private async reencryptSensitiveData(oldKey: CryptoKey, newKey: CryptoKey): Promise<void> {
+    const tables = Object.entries(this.schema)
+      .filter(([, def]) => this.tableHasSensitiveFields(def))
+
+    if (tables.length === 0) {
+      return
+    }
+
+    if (this.useInMemory) {
+      await this.reencryptInMemoryStores(tables, oldKey, newKey)
+      return
+    }
+
+    this.ensureDb()
+
+    for (const [tableName, def] of tables) {
+      const tx = this.db!.transaction([tableName], 'readwrite')
+      const store = tx.objectStore(tableName)
+
+      await new Promise<void>((resolve, reject) => {
+        const cursorRequest = store.openCursor()
+        cursorRequest.onerror = () => reject(cursorRequest.error)
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result
+          if (!cursor) {
+            resolve()
+            return
+          }
+
+          const record = cursor.value as Record<string, unknown>
+          ;(async () => {
+            try {
+              const decrypted = await this.decryptSensitiveFieldsWithKey(record, oldKey)
+              const reencrypted = await this.encryptSensitiveFieldsWithKey(decrypted, newKey)
+              await requestToPromise(cursor.update(reencrypted as any))
+              cursor.continue()
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error(String(error)))
+            }
+          })()
+        }
+      })
+
+      await awaitTransaction(tx)
+    }
+  }
+
+  private async reencryptInMemoryStores(
+    tables: Array<[string, TableDefinition]>,
+    oldKey: CryptoKey,
+    newKey: CryptoKey
+  ): Promise<void> {
+    if (!this.inMemoryStorage) return
+
+    for (const [tableName, def] of tables) {
+      const updates: Array<{ primaryKey: number | string; value: Record<string, unknown> }> = []
+
+      this.inMemoryStorage.openCursor(tableName, (cursor) => {
+        updates.push({ primaryKey: cursor.primaryKey, value: { ...(cursor.value as Record<string, unknown>) } })
+        cursor.continue()
+      })
+
+      for (const { primaryKey, value } of updates) {
+        const decrypted = await this.decryptSensitiveFieldsWithKey(value, oldKey)
+        const reencrypted = await this.encryptSensitiveFieldsWithKey(decrypted, newKey)
+        this.inMemoryStorage.put(tableName, primaryKey, reencrypted)
+      }
+    }
+  }
+
+  private tableHasSensitiveFields(def: TableDefinition): boolean {
+    return Object.keys(def.columns).some(field => SENSITIVE_FIELD_PATTERNS.some(pattern => pattern.test(field)))
   }
 
   // Enhanced authentication with rate limiting
@@ -2771,31 +2905,47 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
   private async encryptSensitiveFields(record: Record<string, unknown>, def: TableDefinition): Promise<Record<string, unknown>> {
     if (!this.encryptionKey) return record
-    
-    const sensitivePatterns = [/password/i, /secret/i, /key/i, /token/i, /auth/i]
-    const result = { ...record }
-    
-    for (const [field, value] of Object.entries(record)) {
-      if (typeof value === 'string' && sensitivePatterns.some(pattern => pattern.test(field))) {
-        result[field] = await this.encryptData(value)
-      }
-    }
-    
-    return result
+
+    return this.encryptSensitiveFieldsWithKey(record, this.encryptionKey)
   }
 
   private async decryptSensitiveFields(record: Record<string, unknown>, def: TableDefinition): Promise<Record<string, unknown>> {
     if (!this.encryptionKey) return record
-    
-    const sensitivePatterns = [/password/i, /secret/i, /key/i, /token/i, /auth/i]
+
+    return this.decryptSensitiveFieldsWithKey(record, this.encryptionKey)
+  }
+
+  private async encryptSensitiveFieldsWithKey(
+    record: Record<string, unknown>,
+    key: CryptoKey
+  ): Promise<Record<string, unknown>> {
+    if (!key) return record
+
     const result = { ...record }
-    
+
     for (const [field, value] of Object.entries(record)) {
-      if (typeof value === 'string' && sensitivePatterns.some(pattern => pattern.test(field))) {
-        result[field] = await this.decryptData(value)
+      if (typeof value === 'string' && SENSITIVE_FIELD_PATTERNS.some(pattern => pattern.test(field))) {
+        result[field] = await this.encryptDataWithKey(value, key)
       }
     }
-    
+
+    return result
+  }
+
+  private async decryptSensitiveFieldsWithKey(
+    record: Record<string, unknown>,
+    key: CryptoKey
+  ): Promise<Record<string, unknown>> {
+    if (!key) return record
+
+    const result = { ...record }
+
+    for (const [field, value] of Object.entries(record)) {
+      if (typeof value === 'string' && SENSITIVE_FIELD_PATTERNS.some(pattern => pattern.test(field))) {
+        result[field] = await this.decryptDataWithKey(value, key)
+      }
+    }
+
     return result
   }
 

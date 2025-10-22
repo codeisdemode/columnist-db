@@ -3,6 +3,8 @@ export { useRAGDB } from './hooks/use-rag-db';
 
 export type {
   RAGDatabaseOptions,
+  RAGDatabaseInitOptions,
+  EmbeddingProviderLike,
   Document,
   SearchResult,
   SearchOptions,

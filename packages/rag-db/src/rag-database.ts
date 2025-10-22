@@ -1,134 +1,207 @@
-import { Columnist } from 'columnist-db-core';
+import { performance } from 'node:perf_hooks';
+
+import { Columnist, BasicEmbeddingProvider } from 'columnist-db-core';
 import { OpenAIEmbeddingProvider } from 'columnist-db-plugin-openai-embedding';
 import {
   RAGDatabaseOptions,
-  Document,
+  RAGDatabaseInitOptions,
+  RAGDatabaseOptionsSchema,
   SearchResult,
   SearchOptions,
-  RAGStats
+  RAGStats,
+  EmbeddingProviderLike,
 } from './types';
 
+type ColumnistInitOptions = Exclude<Parameters<typeof Columnist.init>[1], undefined>;
+
+type EmbeddingEngine = EmbeddingProviderLike;
+
 export class RAGDatabase {
-  private db: any;
-  private embeddingProvider: OpenAIEmbeddingProvider | null = null;
+  private db: any = null;
+  private embeddingProvider: EmbeddingEngine | null = null;
   private options: RAGDatabaseOptions;
   private isInitialized = false;
+  private initializationPromise: Promise<void> | null = null;
+  private queryCache = new Map<string, { timestamp: number; results: SearchResult[] }>();
+  private cacheDurationMs = 60_000;
+  private cacheMaxEntries = 100;
+  private syncAdapterName: string | null = null;
+  private metrics = {
+    totalQueries: 0,
+    totalDurationMs: 0,
+    cacheHits: 0
+  };
 
-  constructor(options: Partial<RAGDatabaseOptions> = {}) {
+  constructor(options: RAGDatabaseInitOptions = {}) {
+    const { embeddingProvider, ...config } = options;
+    const parsed = RAGDatabaseOptionsSchema.parse(config);
+
     this.options = {
-      name: 'rag-db',
-      embeddingModel: 'auto',
-      chunkingStrategy: 'semantic',
-      searchStrategy: 'hybrid',
-      syncEnabled: false,
-      ...options
+      ...parsed,
+      embeddingProvider,
     };
 
-    // Initialize the underlying database
-    this.db = Columnist;
-    // Schema will be initialized when the database is first used
+    this.cacheDurationMs = this.options.cacheDurationMs;
+    this.cacheMaxEntries = this.options.cacheMaxEntries;
+
+    const resolvedModel = this.options.embeddingModel === 'auto'
+      ? 'text-embedding-3-small'
+      : this.options.embeddingModel;
+
+    if (this.options.embeddingProvider) {
+      this.embeddingProvider = this.options.embeddingProvider;
+    } else if (this.options.apiKey) {
+      this.embeddingProvider = new OpenAIEmbeddingProvider({
+        apiKey: this.options.apiKey,
+        model: resolvedModel
+      });
+      this.options.embeddingProvider = this.embeddingProvider;
+    } else {
+      this.embeddingProvider = new BasicEmbeddingProvider();
+      this.options.embeddingProvider = this.embeddingProvider;
+    }
   }
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.setupDatabase()
+        .then(() => {
+          this.isInitialized = true;
+        })
+        .finally(() => {
+          this.initializationPromise = null;
+        });
+    }
 
-    try {
-      // Initialize the database with schema
-      await this.db.init(this.options.name, {
-        schema: {
-          documents: {
-            columns: {
-              id: 'string',
-              content: 'text',
-              metadata: 'json',
-              embeddings: 'vector',
-              chunkId: 'string',
-              createdAt: 'date',
-              updatedAt: 'date'
-            }
+    await this.initializationPromise;
+  }
+
+  private async setupDatabase(): Promise<void> {
+    const embeddingDims = this.embeddingProvider?.getDimensions() ?? 128;
+
+    const initOptions: ColumnistInitOptions = {
+      autoInitialize: false,
+      schema: {
+        documents: {
+          columns: {
+            id: 'number',
+            content: 'string',
+            metadata: 'json',
+            createdAt: 'date',
+            updatedAt: 'date'
           },
-          chunks: {
-            columns: {
-              id: 'string',
-              documentId: 'string',
-              content: 'text',
-              embeddings: 'vector',
-              metadata: 'json',
-              createdAt: 'date'
-            }
+          primaryKey: 'id',
+          searchableFields: ['content']
+        },
+        chunks: {
+          columns: {
+            id: 'number',
+            documentId: 'number',
+            content: 'string',
+            metadata: 'json',
+            createdAt: 'date',
+            updatedAt: 'date'
+          },
+          primaryKey: 'id',
+          searchableFields: ['content'],
+          vector: {
+            field: 'content',
+            dims: embeddingDims
           }
         }
-      });
-    } catch (error) {
-      // Fallback to in-memory storage for Node.js environments
-      if (error instanceof Error && error.message.includes('IndexedDB is not available')) {
-        console.warn('Using in-memory storage for Node.js environment');
-      } else {
-        throw error;
       }
+    };
+
+    if (this.options.syncEnabled && this.options.syncAdapter) {
+      initOptions.sync = { enabled: true };
     }
 
-    // Initialize embedding provider if API key is provided
-    if (this.options.apiKey) {
-      this.embeddingProvider = new OpenAIEmbeddingProvider({
-        apiKey: this.options.apiKey,
-        model: this.options.embeddingModel === 'auto' ? 'text-embedding-3-small' : this.options.embeddingModel
+    this.db = await Columnist.init(this.options.name, initOptions);
+
+    if (this.embeddingProvider) {
+      this.db.registerEmbedder('chunks', async (text: string) => {
+        return this.embeddingProvider!.generateEmbedding(text);
       });
     }
 
-    // Initialize sync if enabled
     if (this.options.syncEnabled && this.options.syncAdapter) {
       await this.initializeSync();
     }
-
-    this.isInitialized = true;
   }
 
   private async initializeSync(): Promise<void> {
-    // TODO: Implement sync initialization based on adapter
-    console.log('Sync initialization not yet implemented');
+    if (!this.options.syncEnabled || !this.options.syncAdapter || !this.db) {
+      return;
+    }
+
+    if (this.syncAdapterName) {
+      return;
+    }
+
+    const dbOptions = typeof (this.db as any).getOptions === 'function'
+      ? (this.db as any).getOptions()
+      : undefined;
+
+    if (!dbOptions?.sync || dbOptions.sync.enabled !== true) {
+      return;
+    }
+
+    const adapterName = `${this.options.name}-${this.options.syncAdapter}-sync`;
+    const adapterOptions = {
+      ...(this.options.syncConfig ?? {}),
+      tables: ['documents', 'chunks']
+    };
+
+    try {
+      await this.db.registerSyncAdapter(adapterName, this.options.syncAdapter, adapterOptions);
+      await this.db.startSync(adapterName);
+      this.syncAdapterName = adapterName;
+    } catch (error) {
+      console.error('Failed to initialize sync adapter:', error);
+      throw error;
+    }
   }
 
   async addDocument(content: string, metadata: Record<string, any> = {}): Promise<string> {
     await this.initialize();
 
-    const documentId = this.generateId();
-    const now = new Date();
-
-    // Chunk the content
-    const chunks = await this.chunkContent(content);
-
-    // Store main document
-    const document: Document = {
-      id: documentId,
-      content,
-      metadata,
-      createdAt: now,
-      updatedAt: now
-    };
-
-    await this.db.insert('documents', document);
-
-    // Store chunks with embeddings
-    for (const chunk of chunks) {
-      const chunkId = this.generateId();
-      let embeddings: Float32Array | undefined;
-
-      if (this.embeddingProvider) {
-        embeddings = await this.embeddingProvider.generateEmbedding(chunk);
-      }
-
-      await this.db.insert('chunks', {
-        id: chunkId,
-        documentId,
-        content: chunk,
-        embeddings,
-        metadata: { ...metadata, chunkIndex: chunks.indexOf(chunk) },
-        createdAt: now
-      });
+    const db = this.db;
+    if (!db) {
+      throw new Error('RAG database has not been initialized');
     }
 
-    return documentId;
+    const now = new Date();
+    const chunks = await this.chunkContent(content);
+    if (chunks.length === 0) {
+      chunks.push(content);
+    }
+
+    const { id: insertedId } = await db.insert(
+      {
+        content,
+        metadata,
+        createdAt: now,
+        updatedAt: now
+      },
+      'documents'
+    );
+
+    for (const [index, chunk] of chunks.entries()) {
+      await db.insert(
+        {
+          documentId: insertedId,
+          content: chunk,
+          metadata: { ...metadata, documentId: insertedId, chunkIndex: index },
+          createdAt: now,
+          updatedAt: now
+        },
+        'chunks'
+      );
+    }
+
+    this.queryCache.clear();
+    return insertedId.toString();
   }
 
   async search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
@@ -137,9 +210,21 @@ export class RAGDatabase {
     const limit = options.limit || 10;
     const threshold = options.threshold || 0.5;
 
+    const cacheKey = JSON.stringify({ query, options: { ...options, limit, threshold } });
+    this.pruneCache(Date.now());
+    const cached = this.queryCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now - cached.timestamp < this.cacheDurationMs) {
+      this.metrics.totalQueries += 1;
+      this.metrics.cacheHits += 1;
+      cached.timestamp = now;
+      this.touchCacheEntry(cacheKey, cached);
+      return this.cloneResults(cached.results).slice(0, limit);
+    }
+
+    const start = performance.now();
     let results: SearchResult[] = [];
 
-    // Hybrid search: semantic + keyword
     if (this.options.searchStrategy === 'hybrid' || this.options.searchStrategy === 'semantic') {
       const semanticResults = await this.semanticSearch(query, limit, threshold);
       results.push(...semanticResults);
@@ -150,11 +235,17 @@ export class RAGDatabase {
       results.push(...keywordResults);
     }
 
-    // Deduplicate and rank results
     const uniqueResults = this.deduplicateResults(results);
     const rankedResults = this.rankResults(uniqueResults, query);
+    const limited = rankedResults.slice(0, limit);
 
-    return rankedResults.slice(0, limit);
+    const duration = performance.now() - start;
+    this.metrics.totalQueries += 1;
+    this.metrics.totalDurationMs += duration;
+    this.queryCache.set(cacheKey, { timestamp: now, results: this.cloneResults(limited) });
+    this.enforceCacheLimit();
+
+    return this.cloneResults(limited);
   }
 
   private async semanticSearch(query: string, limit: number, threshold: number): Promise<SearchResult[]> {
@@ -162,55 +253,98 @@ export class RAGDatabase {
       return [];
     }
 
-    const queryEmbedding = await this.embeddingProvider.generateEmbedding(query);
+    const db = this.db;
+    if (!db) {
+      return [];
+    }
 
-    const results = await (this.db as any).vectorSearch('chunks', queryEmbedding, {
-      limit: limit * 2, // Get more for ranking
+    const results = await db.vectorSearchText('chunks', query, {
+      limit: limit * 2,
       metric: 'cosine'
     });
 
     return results
       .filter((result: any) => result.score >= threshold)
-      .map((result: any) => ({
-        document: {
-          id: result.id.toString(),
-          content: result.content,
-          metadata: result.metadata || {},
-          createdAt: new Date(result.createdAt),
-          updatedAt: new Date(result.updatedAt || result.createdAt)
-        },
-        score: result.score,
-        relevance: this.scoreToRelevance(result.score),
-        highlights: this.generateHighlights(result.content, query)
-      }));
+      .map((result: any) => this.buildSearchResult(result, query));
   }
 
   private async keywordSearch(query: string, limit: number, threshold: number): Promise<SearchResult[]> {
-    const results = await (this.db as any).search(query, {
+    const db = this.db;
+    if (!db) {
+      return [];
+    }
+
+    const results = await db.search(query, {
       table: 'chunks',
       limit: limit * 2
     });
 
     return results
       .filter((result: any) => result.score >= threshold)
-      .map((result: any) => ({
-        document: {
-          id: result.id.toString(),
-          content: result.content,
-          metadata: result.metadata || {},
-          createdAt: new Date(result.createdAt),
-          updatedAt: new Date(result.updatedAt || result.createdAt)
-        },
-        score: result.score,
-        relevance: this.scoreToRelevance(result.score),
-        highlights: this.generateHighlights(result.content, query)
-      }));
+      .map((result: any) => this.buildSearchResult(result, query));
+  }
+
+  private buildSearchResult(raw: any, query: string): SearchResult {
+    const createdAt = raw.createdAt instanceof Date ? raw.createdAt : new Date(raw.createdAt);
+    const updatedAtRaw = raw.updatedAt ?? raw.createdAt;
+    const updatedAt = updatedAtRaw instanceof Date ? updatedAtRaw : new Date(updatedAtRaw);
+
+    return {
+      document: {
+        id: raw.id.toString(),
+        content: raw.content,
+        metadata: { ...(raw.metadata || {}), documentId: raw.documentId },
+        chunkId: raw.id.toString(),
+        createdAt,
+        updatedAt
+      },
+      score: raw.score,
+      relevance: this.scoreToRelevance(raw.score),
+      highlights: this.generateHighlights(raw.content, query)
+    };
+  }
+
+  private cloneResults(results: SearchResult[]): SearchResult[] {
+    return results.map(result => ({
+      ...result,
+      document: {
+        ...result.document,
+        metadata: { ...(result.document.metadata || {}) },
+        createdAt: new Date(result.document.createdAt),
+        updatedAt: new Date(result.document.updatedAt)
+      },
+      highlights: result.highlights ? [...result.highlights] : undefined
+    }));
+  }
+
+  private touchCacheEntry(key: string, entry: { timestamp: number; results: SearchResult[] }): void {
+    this.queryCache.delete(key);
+    this.queryCache.set(key, entry);
+  }
+
+  private pruneCache(now: number): void {
+    for (const [key, entry] of this.queryCache.entries()) {
+      if (now - entry.timestamp >= this.cacheDurationMs) {
+        this.queryCache.delete(key);
+      }
+    }
+  }
+
+  private enforceCacheLimit(): void {
+    while (this.queryCache.size > this.cacheMaxEntries) {
+      const oldestKey = this.queryCache.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      this.queryCache.delete(oldestKey);
+    }
   }
 
   private deduplicateResults(results: SearchResult[]): SearchResult[] {
     const seen = new Set<string>();
     return results.filter(result => {
-      const key = result.document.id;
+      const metaId = (result.document.metadata && (result.document.metadata as any).documentId) ?? result.document.id;
+      const key = metaId != null ? metaId.toString() : result.document.id;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -350,30 +484,52 @@ export class RAGDatabase {
     return [...new Set(highlights)].slice(0, 5); // Unique highlights, max 5
   }
 
-  private generateId(): string {
-    return Math.random().toString(36).substring(2) + Date.now().toString(36);
-  }
-
   async getStats(): Promise<RAGStats> {
     await this.initialize();
 
-    const documents = await this.db.getAll('documents');
-    const chunks = await this.db.getAll('chunks');
+    const db = this.db;
+    if (!db) {
+      throw new Error('RAG database has not been initialized');
+    }
+
+    const documents = await db.getAll('documents', Number.MAX_SAFE_INTEGER);
+    const chunks = await db.getAll('chunks', Number.MAX_SAFE_INTEGER);
 
     return {
       totalDocuments: documents.length,
       totalChunks: chunks.length,
       embeddingModel: this.embeddingProvider?.getModel() || 'none',
       searchPerformance: {
-        avgResponseTime: 0, // TODO: Track performance
-        totalQueries: 0,
-        cacheHitRate: 0
+        avgResponseTime: this.metrics.totalQueries
+          ? this.metrics.totalDurationMs / this.metrics.totalQueries
+          : 0,
+        totalQueries: this.metrics.totalQueries,
+        cacheHitRate: this.metrics.totalQueries
+          ? this.metrics.cacheHits / this.metrics.totalQueries
+          : 0
       }
     };
   }
 
   async clear(): Promise<void> {
-    await this.db.clear('documents');
-    await this.db.clear('chunks');
+    await this.initialize();
+
+    const db = this.db;
+    if (!db) {
+      return;
+    }
+
+    const documents = await db.getAll('documents', Number.MAX_SAFE_INTEGER);
+    const chunks = await db.getAll('chunks', Number.MAX_SAFE_INTEGER);
+
+    if (documents.length > 0) {
+      await db.bulkDelete(documents.map((doc: any) => doc.id), 'documents');
+    }
+
+    if (chunks.length > 0) {
+      await db.bulkDelete(chunks.map((chunk: any) => chunk.id), 'chunks');
+    }
+
+    this.queryCache.clear();
   }
 }

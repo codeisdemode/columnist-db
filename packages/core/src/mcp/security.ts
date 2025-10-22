@@ -10,18 +10,40 @@ export interface SecurityConfig {
   maxRequestsPerWindow: number;
 }
 
+export interface SecurityEventRecord {
+  timestamp: string;
+  event: string;
+  details: any;
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface SecurityLogger {
+  log(event: SecurityEventRecord): Promise<void> | void;
+}
+
+export interface SecurityManagerOptions {
+  maxBufferedEvents?: number;
+  logger?: SecurityLogger;
+}
+
 export class SecurityManager {
   private connections = new Map<string, number>();
   private requestCounts = new Map<string, { count: number; windowStart: number }>();
   private blockedClients = new Set<string>();
+  private eventLog: SecurityEventRecord[] = [];
+  private maxBufferedEvents: number;
+  private logger?: SecurityLogger;
 
-  constructor(private config: SecurityConfig) {
+  constructor(private config: SecurityConfig, options: SecurityManagerOptions = {}) {
     this.config.maxConnectionsPerClient = this.config.maxConnectionsPerClient || 10;
     this.config.maxQueryComplexity = this.config.maxQueryComplexity || 1000;
     this.config.allowedTables = this.config.allowedTables || [];
     this.config.allowedOperations = this.config.allowedOperations || ['query', 'read'];
     this.config.rateLimitWindowMs = this.config.rateLimitWindowMs || 60000; // 1 minute
     this.config.maxRequestsPerWindow = this.config.maxRequestsPerWindow || 100;
+
+    this.maxBufferedEvents = Math.max(options.maxBufferedEvents ?? 200, 1);
+    this.logger = options.logger;
   }
 
   async validateQuery(query: any): Promise<{ valid: boolean; error?: string }> {
@@ -83,16 +105,40 @@ export class SecurityManager {
 
   async logSecurityEvent(event: string, details: any): Promise<void> {
     const timestamp = new Date().toISOString();
-    const logEntry = {
+    const record: SecurityEventRecord = {
       timestamp,
       event,
       details,
       severity: this.getEventSeverity(event)
     };
 
-    console.log(`[SECURITY] ${timestamp} - ${event}:`, details);
+    this.eventLog.push(this.cloneEvent(record));
+    if (this.eventLog.length > this.maxBufferedEvents) {
+      this.eventLog.splice(0, this.eventLog.length - this.maxBufferedEvents);
+    }
 
-    // TODO: Implement proper security logging (file, database, etc.)
+    if (this.logger) {
+      try {
+        await this.logger.log(record);
+      } catch (error) {
+        console.error('Security logger failed:', error);
+      }
+    } else {
+      console.log(`[SECURITY] ${timestamp} - ${event}:`, details);
+    }
+  }
+
+  setLogger(logger?: SecurityLogger): void {
+    this.logger = logger;
+  }
+
+  getRecentEvents(limit: number = this.maxBufferedEvents): SecurityEventRecord[] {
+    const sliceStart = Math.max(this.eventLog.length - limit, 0);
+    return this.eventLog.slice(sliceStart).map(event => this.cloneEvent(event));
+  }
+
+  clearSecurityEvents(): void {
+    this.eventLog = [];
   }
 
   isTableAllowed(table: string): boolean {
@@ -260,13 +306,34 @@ export class SecurityManager {
     return result;
   }
 
-  private getEventSeverity(event: string): string {
+  private getEventSeverity(event: string): 'low' | 'medium' | 'high' {
     const criticalEvents = ['rate_limit_exceeded', 'connection_limit_exceeded'];
     const warningEvents = ['query_validation_failed'];
 
-    if (criticalEvents.includes(event)) return 'CRITICAL';
-    if (warningEvents.includes(event)) return 'WARNING';
-    return 'INFO';
+    if (criticalEvents.includes(event)) return 'high';
+    if (warningEvents.includes(event)) return 'medium';
+    return 'low';
+  }
+
+  private cloneEvent(event: SecurityEventRecord): SecurityEventRecord {
+    let details = event.details;
+
+    try {
+      if (typeof structuredClone === 'function') {
+        details = structuredClone(event.details);
+      } else {
+        details = JSON.parse(JSON.stringify(event.details ?? null));
+      }
+    } catch {
+      details = event.details;
+    }
+
+    return {
+      timestamp: event.timestamp,
+      event: event.event,
+      details,
+      severity: event.severity
+    };
   }
 
   // Cleanup expired rate limit data

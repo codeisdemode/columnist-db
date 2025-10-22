@@ -1,129 +1,106 @@
-// API Demonstration - Shows the RAG Database API structure without requiring database initialization
+import { RAGDatabase } from '../src';
 
-console.log('📚 ColumnistDB RAG Platform - API Demonstration\n');
+type SampleDocument = {
+  content: string;
+  metadata: Record<string, string>;
+};
 
-// Mock RAGDatabase class to demonstrate API
-class MockRAGDatabase {
-  constructor(options: any) {
-    console.log('✅ RAGDatabase initialized with options:', options);
-  }
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-  async addDocument(content: string, metadata: any = {}) {
-    console.log(`📄 Adding document: "${content.substring(0, 50)}..."`);
-    console.log(`   Metadata:`, metadata);
-    return 'mock-doc-id';
-  }
+const sampleDocuments: SampleDocument[] = [
+  {
+    content:
+      'Artificial intelligence is transforming how we interact with technology. Machine learning algorithms can now understand natural language, generate human-like text, and reason about complex problems. Successful products combine retrieval augmented generation with local context so assistants can stay fast and private.',
+    metadata: {
+      category: 'ai',
+      source: 'tech-blog',
+      title: 'How AI Assistants Stay Fast',
+    },
+  },
+  {
+    content:
+      'React is a popular JavaScript library for building user interfaces. It uses a declarative component model, the virtual DOM, and hooks for state management. Teams that ship fast rely on reusable component libraries, co-located tests, and structured data fetching.',
+    metadata: {
+      category: 'web-dev',
+      source: 'framework-docs',
+      title: 'Modern React Practices',
+    },
+  },
+  {
+    content:
+      'Vector databases store numerical representations of text, audio, and images. ColumnistDB blends local columnar storage with vector search so applications can run entirely on the client. Hybrid search combines keyword ranking with cosine similarity for precise retrieval.',
+    metadata: {
+      category: 'databases',
+      source: 'product-whitepaper',
+      title: 'Building Local-First Vector Search',
+    },
+  },
+];
 
-  async search(query: string, options: any = {}) {
-    console.log(`🔍 Searching for: "${query}"`);
-    console.log(`   Options:`, options);
+async function runDemo(): Promise<void> {
+  console.log('📚 ColumnistDB RAG Platform — Live API Demonstration');
 
-    // Mock search results
-    return [
-      {
-        document: {
-          id: 'doc-1',
-          content: 'Artificial intelligence is transforming how we interact with technology.',
-          metadata: { category: 'ai' },
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        score: 0.856,
-        relevance: 'high',
-        highlights: ['artificial', 'intelligence']
-      },
-      {
-        document: {
-          id: 'doc-2',
-          content: 'Machine learning algorithms can understand natural language.',
-          metadata: { category: 'ml' },
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        score: 0.723,
-        relevance: 'medium',
-        highlights: ['machine', 'learning']
-      }
-    ];
-  }
-
-  async getStats() {
-    return {
-      totalDocuments: 4,
-      totalChunks: 8,
-      embeddingModel: 'text-embedding-3-small',
-      searchPerformance: {
-        avgResponseTime: 120,
-        totalQueries: 15,
-        cacheHitRate: 0.8
-      }
-    };
-  }
-}
-
-// Demo function
-async function runAPIDemo() {
-  console.log('🚀 Starting API Demonstration...\n');
-
-  // Initialize RAG database
-  const ragDb = new MockRAGDatabase({
+  const ragDb = new RAGDatabase({
     name: 'demo-rag-db',
-    embeddingModel: 'auto',
-    chunkingStrategy: 'semantic',
-    searchStrategy: 'hybrid'
+    embeddingModel: OPENAI_API_KEY ? 'text-embedding-3-small' : 'auto',
+    apiKey: OPENAI_API_KEY,
+    cacheDurationMs: 120_000,
+    cacheMaxEntries: 10,
   });
 
-  console.log('\n📚 Adding sample documents...');
+  // Start with a clean slate so the output is deterministic.
+  await ragDb.clear();
 
-  // Add sample documents
-  const documents = [
-    {
-      content: "Artificial intelligence is transforming how we interact with technology. Machine learning algorithms can now understand natural language and generate human-like text.",
-      metadata: { category: 'ai', source: 'tech-blog' }
-    },
-    {
-      content: "React is a popular JavaScript library for building user interfaces. It uses a virtual DOM for efficient rendering and has a large ecosystem of tools and libraries.",
-      metadata: { category: 'web-dev', source: 'framework-docs' }
-    }
-  ];
-
-  for (const doc of documents) {
-    await ragDb.addDocument(doc.content, doc.metadata);
+  console.log('\n📄 Loading sample documents into the database...');
+  for (const document of sampleDocuments) {
+    const documentId = await ragDb.addDocument(document.content, document.metadata);
+    const title = document.metadata.title ?? documentId;
+    console.log(`  • Stored "${title}" (document id ${documentId})`);
   }
 
-  console.log('\n🔍 Testing search capabilities...');
+  const queries = ['machine learning', 'React components', 'vector search'];
+  for (const query of queries) {
+    console.log(`\n🔍 Query: "${query}"`);
+    const results = await ragDb.search(query, { limit: 3, includeHighlights: true });
 
-  // Test searches
-  const testQueries = [
-    'machine learning',
-    'React components',
-    'artificial intelligence'
-  ];
+    if (results.length === 0) {
+      console.log('  No matches found.');
+      continue;
+    }
 
-  for (const query of testQueries) {
-    const results = await ragDb.search(query, { limit: 2 });
-
-    console.log(`\nResults for "${query}":`);
     results.forEach((result, index) => {
-      console.log(`  ${index + 1}. ${result.document.content.substring(0, 60)}...`);
-      console.log(`     Score: ${result.score.toFixed(3)}, Relevance: ${result.relevance}`);
-      if (result.highlights) {
-        console.log(`     Highlights: ${result.highlights.join(', ')}`);
+      const snippet = result.document.content.replace(/\s+/g, ' ').slice(0, 120);
+      const highlights = result.highlights?.slice(0, 5).join(', ');
+      const title = result.document.metadata?.title ?? 'Untitled document';
+      console.log(`  ${index + 1}. ${title}`);
+      console.log(`     Score: ${result.score.toFixed(3)} (${result.relevance})`);
+      console.log(`     Snippet: ${snippet}${snippet.length === 120 ? '…' : ''}`);
+      if (highlights) {
+        console.log(`     Highlights: ${highlights}`);
       }
     });
   }
 
-  console.log('\n📊 Database Statistics:');
-  const stats = await ragDb.getStats();
-  console.log(`  Total Documents: ${stats.totalDocuments}`);
-  console.log(`  Total Chunks: ${stats.totalChunks}`);
-  console.log(`  Embedding Model: ${stats.embeddingModel}`);
-  console.log(`  Average Response Time: ${stats.searchPerformance.avgResponseTime}ms`);
+  console.log('\n♻️  Re-running the first query to demonstrate result caching...');
+  const cachedResults = await ragDb.search(queries[0], { limit: 3, includeHighlights: true });
+  console.log(`  Retrieved ${cachedResults.length} cached results for "${queries[0]}".`);
 
-  console.log('\n🎉 API Demonstration completed successfully!');
-  console.log('\n💡 This demonstrates the RAG Database API structure.');
-  console.log('   In a real implementation, this would work with actual data storage and embeddings.');
+  const stats = await ragDb.getStats();
+  console.log('\n📊 Database statistics:');
+  console.log(`  Documents stored: ${stats.totalDocuments}`);
+  console.log(`  Chunks indexed: ${stats.totalChunks}`);
+  console.log(`  Embedding model: ${stats.embeddingModel}`);
+  console.log(
+    `  Avg response time: ${stats.searchPerformance.avgResponseTime.toFixed(2)} ms across ${stats.searchPerformance.totalQueries} queries`
+  );
+  console.log(
+    `  Cache hit rate: ${(stats.searchPerformance.cacheHitRate * 100).toFixed(1)}%`
+  );
+
+  console.log('\n🎉 Demo complete! You can edit sample documents or queries to experiment further.');
 }
 
-// Run the demo
-runAPIDemo().catch(console.error);
+runDemo().catch(error => {
+  console.error('❌ RAG API demo failed:', error);
+  process.exitCode = 1;
+});

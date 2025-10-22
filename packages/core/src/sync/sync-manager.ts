@@ -1,4 +1,5 @@
 import { ColumnistDB } from '../columnist';
+import type { ColumnistDBOptions } from '../types';
 import { BaseSyncAdapter, SyncOptions, SyncStatus, SyncEvent } from './base-adapter';
 import { SyncConfig, SyncAdapterConstructor } from './types';
 import { DeviceManager } from './device-utils';
@@ -15,12 +16,18 @@ export class SyncManager {
   }
 
   async initialize(): Promise<void> {
-    // Only initialize device manager if sync is enabled
-    // TODO: Add getOptions method to ColumnistDB or access sync config differently
-    // if (this.db.getOptions()?.sync?.enabled !== false) {
+    const options = typeof (this.db as any).getOptions === 'function'
+      ? (this.db as any).getOptions() as ColumnistDBOptions
+      : undefined;
+
+    const syncConfig = options?.sync;
+
+    if (!syncConfig || syncConfig.enabled !== true || syncConfig.autoRegisterDevices === false) {
+      return;
+    }
+
     this.deviceManager = new DeviceManager(this.db);
     await this.deviceManager.initialize();
-    // }
   }
 
   registerAdapter(name: string, adapter: BaseSyncAdapter): void {

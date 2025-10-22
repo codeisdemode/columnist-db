@@ -1,29 +1,25 @@
 #!/usr/bin/env node
 
-/**
- * Unified AI Memory MCP Server
- *
- * Combines the best features from:
- * - AI Memory MCP (12 tools for universal content storage)
- * - Core Memory Tools (advanced contextual search and consolidation)
- * - Research Assistant MCP (research paper management as content type)
- *
- * Single unified server for all AI memory needs
- */
-
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
-  ListToolsRequestSchema
+  ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+
+import { Columnist, BasicEmbeddingProvider } from 'columnist-db-core';
+
+const DEFAULT_DB_NAME = process.env.DB_NAME || 'ai-memory';
 
 class UnifiedAIMemoryMCPServer {
   constructor(config = {}) {
     this.config = {
-      databaseName: process.env.DB_NAME || 'ai-memory',
-      ...config
+      databaseName: DEFAULT_DB_NAME,
+      ...config,
     };
+
+    this.embeddingProvider = new BasicEmbeddingProvider();
+    this.dbReady = this.initializeDatabase();
 
     this.server = new Server(
       {
@@ -32,634 +28,1067 @@ class UnifiedAIMemoryMCPServer {
       },
       {
         capabilities: {
-          tools: {}
-        }
+          tools: {},
+        },
       }
     );
 
     this.setupHandlers();
   }
 
+  async initializeDatabase() {
+    const db = await Columnist.init(this.config.databaseName, {
+      autoInitialize: false,
+      schema: {
+        content: {
+          columns: {
+            id: 'number',
+            contentType: 'string',
+            title: 'string',
+            body: 'string',
+            tagString: 'string',
+            tags: 'json',
+            metadata: 'json',
+            source: 'string',
+            createdAt: 'date',
+            updatedAt: 'date',
+          },
+          primaryKey: 'id',
+          searchableFields: ['title', 'body', 'tagString', 'contentType'],
+          secondaryIndexes: ['contentType', 'createdAt'],
+          vector: {
+            field: 'body',
+            dims: this.embeddingProvider.getDimensions(),
+          },
+        },
+      },
+    });
+
+    db.registerEmbedder('content', text => this.embeddingProvider.generateEmbedding(text));
+    return db;
+  }
+
+  async getDb() {
+    return this.dbReady;
+  }
+
   setupHandlers() {
-    // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        // Universal Content Storage
-        {
-          name: 'store_content',
-          description: 'Store any type of content in AI memory',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              content: { type: 'string', description: 'Content to store' },
-              content_type: {
-                type: 'string',
-                description: 'Type of content (conversation, document, web, note, custom, research)',
-                enum: ['conversation', 'document', 'web', 'note', 'custom', 'research']
-              },
-              title: { type: 'string', description: 'Content title', optional: true },
-              tags: { type: 'string', description: 'Comma-separated tags', optional: true },
-              metadata: { type: 'string', description: 'JSON metadata', optional: true },
-              source: { type: 'string', description: 'Content source', optional: true }
-            },
-            required: ['content', 'content_type']
-          }
-        },
-        {
-          name: 'search_memory',
-          description: 'Search across all stored content',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Search query' },
-              content_type: { type: 'string', description: 'Filter by content type', optional: true },
-              tags: { type: 'string', description: 'Filter by tags', optional: true },
-              limit: { type: 'number', description: 'Maximum results', optional: true }
-            },
-            required: ['query']
-          }
-        },
-        {
-          name: 'get_content',
-          description: 'Retrieve specific content by ID',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              content_id: { type: 'string', description: 'Content ID' }
-            },
-            required: ['content_id']
-          }
-        },
-
-        // Conversation Memory
-        {
-          name: 'store_conversation',
-          description: 'Store conversation with AI',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              messages: { type: 'string', description: 'JSON array of conversation messages' },
-              summary: { type: 'string', description: 'Conversation summary', optional: true },
-              tags: { type: 'string', description: 'Comma-separated tags', optional: true }
-            },
-            required: ['messages']
-          }
-        },
-        {
-          name: 'search_conversations',
-          description: 'Search conversation history',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Search query' },
-              tags: { type: 'string', description: 'Filter by tags', optional: true }
-            },
-            required: ['query']
-          }
-        },
-
-        // Document Management
-        {
-          name: 'store_document',
-          description: 'Store documents with metadata',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              content: { type: 'string', description: 'Document content' },
-              title: { type: 'string', description: 'Document title' },
-              author: { type: 'string', description: 'Document author', optional: true },
-              document_type: { type: 'string', description: 'Type (article, report, email, etc.)', optional: true },
-              tags: { type: 'string', description: 'Comma-separated tags', optional: true }
-            },
-            required: ['content', 'title']
-          }
-        },
-
-        // Web Content
-        {
-          name: 'store_web_content',
-          description: 'Store web pages or online content',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              content: { type: 'string', description: 'Web content' },
-              url: { type: 'string', description: 'Source URL' },
-              title: { type: 'string', description: 'Page title', optional: true },
-              summary: { type: 'string', description: 'Content summary', optional: true }
-            },
-            required: ['content', 'url']
-          }
-        },
-
-        // Research Paper Management (from Research Assistant MCP)
-        {
-          name: 'store_research_paper',
-          description: 'Store research papers with academic metadata',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              title: { type: 'string', description: 'Paper title' },
-              authors: { type: 'string', description: 'Comma-separated list of authors' },
-              abstract: { type: 'string', description: 'Paper abstract' },
-              publication_date: { type: 'string', description: 'Publication date (YYYY-MM-DD)' },
-              tags: { type: 'string', description: 'Comma-separated tags', optional: true },
-              url: { type: 'string', description: 'Paper URL', optional: true },
-              journal: { type: 'string', description: 'Journal/conference name', optional: true }
-            },
-            required: ['title', 'authors', 'abstract', 'publication_date']
-          }
-        },
-
-        // Memory Management
-        {
-          name: 'get_memory_stats',
-          description: 'Get statistics about stored content',
-          inputSchema: {
-            type: 'object',
-            properties: {}
-          }
-        },
-        {
-          name: 'clear_memory',
-          description: 'Clear all or filtered content from memory',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              content_type: { type: 'string', description: 'Clear specific content type', optional: true },
-              tags: { type: 'string', description: 'Clear content with specific tags', optional: true }
-            }
-          }
-        },
-        {
-          name: 'export_memory',
-          description: 'Export memory content to various formats',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              format: { type: 'string', description: 'Export format (json, csv, markdown)', optional: true },
-              content_type: { type: 'string', description: 'Export specific content type', optional: true }
-            }
-          }
-        },
-
-        // Advanced Memory Features (from Core Memory Tools)
-        {
-          name: 'find_related_content',
-          description: 'Find content related to a topic or existing content',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              topic: { type: 'string', description: 'Topic or content ID' },
-              similarity_threshold: { type: 'number', description: 'Similarity threshold', optional: true }
-            },
-            required: ['topic']
-          }
-        },
-        {
-          name: 'summarize_content',
-          description: 'Generate summary of stored content',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              content_ids: { type: 'string', description: 'Comma-separated content IDs', optional: true },
-              content_type: { type: 'string', description: 'Summarize specific content type', optional: true }
-            }
-          }
-        },
-        {
-          name: 'contextual_memory_search',
-          description: 'Search memories with contextual awareness',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              current_topic: { type: 'string', description: 'Current conversation topic' },
-              user_preferences: { type: 'string', description: 'JSON user preferences', optional: true },
-              time_context: { type: 'string', description: 'JSON time context', optional: true }
-            },
-            required: ['current_topic']
-          }
-        },
-        {
-          name: 'consolidate_memories',
-          description: 'Consolidate and optimize memory storage',
-          inputSchema: {
-            type: 'object',
-            properties: {}
-          }
-        }
-      ]
+      tools: this.listTools(),
     }));
 
-    // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
+    this.server.setRequestHandler(CallToolRequestSchema, async request => {
+      const { name, arguments: args = {} } = request.params;
 
       switch (name) {
-        // Universal Content Storage
         case 'store_content':
-          return await this.handleStoreContent(args);
+          return this.handleStoreContent(args);
         case 'search_memory':
-          return await this.handleSearchMemory(args);
+          return this.handleSearchMemory(args);
         case 'get_content':
-          return await this.handleGetContent(args);
-
-        // Conversation Memory
+          return this.handleGetContent(args);
         case 'store_conversation':
-          return await this.handleStoreConversation(args);
+          return this.handleStoreConversation(args);
         case 'search_conversations':
-          return await this.handleSearchConversations(args);
-
-        // Document Management
+          return this.handleSearchConversations(args);
         case 'store_document':
-          return await this.handleStoreDocument(args);
-
-        // Web Content
+          return this.handleStoreDocument(args);
         case 'store_web_content':
-          return await this.handleStoreWebContent(args);
-
-        // Research Paper Management
+          return this.handleStoreWebContent(args);
         case 'store_research_paper':
-          return await this.handleStoreResearchPaper(args);
-
-        // Memory Management
+          return this.handleStoreResearchPaper(args);
         case 'get_memory_stats':
-          return await this.handleGetMemoryStats(args);
+          return this.handleGetMemoryStats();
         case 'clear_memory':
-          return await this.handleClearMemory(args);
+          return this.handleClearMemory(args);
         case 'export_memory':
-          return await this.handleExportMemory(args);
-
-        // Advanced Memory Features
+          return this.handleExportMemory(args);
         case 'find_related_content':
-          return await this.handleFindRelatedContent(args);
+          return this.handleFindRelatedContent(args);
         case 'summarize_content':
-          return await this.handleSummarizeContent(args);
+          return this.handleSummarizeContent(args);
         case 'contextual_memory_search':
-          return await this.handleContextualMemorySearch(args);
+          return this.handleContextualMemorySearch(args);
         case 'consolidate_memories':
-          return await this.handleConsolidateMemories(args);
-
+          return this.handleConsolidateMemories();
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
     });
   }
 
-  // Universal Content Storage Handlers
+  listTools() {
+    return [
+      {
+        name: 'store_content',
+        description: 'Store arbitrary content in the AI memory database',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', description: 'Content to store' },
+            content_type: {
+              type: 'string',
+              description: 'Content type (conversation, document, web, note, custom, research)',
+              enum: ['conversation', 'document', 'web', 'note', 'custom', 'research'],
+            },
+            title: { type: 'string', description: 'Content title', optional: true },
+            tags: { type: 'string', description: 'Comma-separated tags', optional: true },
+            metadata: { type: 'string', description: 'JSON metadata', optional: true },
+            source: { type: 'string', description: 'Content source', optional: true },
+          },
+          required: ['content', 'content_type'],
+        },
+      },
+      {
+        name: 'search_memory',
+        description: 'Search across stored content',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            content_type: { type: 'string', description: 'Filter by content type', optional: true },
+            tags: { type: 'string', description: 'Filter by tags', optional: true },
+            limit: { type: 'number', description: 'Maximum results', optional: true },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'get_content',
+        description: 'Retrieve a stored memory by id',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content_id: { type: 'string', description: 'Content id' },
+          },
+          required: ['content_id'],
+        },
+      },
+      {
+        name: 'store_conversation',
+        description: 'Store a conversation transcript with optional summary',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            messages: { type: 'string', description: 'JSON array of conversation messages' },
+            summary: { type: 'string', description: 'Conversation summary', optional: true },
+            tags: { type: 'string', description: 'Comma-separated tags', optional: true },
+          },
+          required: ['messages'],
+        },
+      },
+      {
+        name: 'search_conversations',
+        description: 'Search stored conversations',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            tags: { type: 'string', description: 'Filter by tags', optional: true },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'store_document',
+        description: 'Store a document with metadata',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', description: 'Document content' },
+            title: { type: 'string', description: 'Document title' },
+            author: { type: 'string', description: 'Document author', optional: true },
+            document_type: { type: 'string', description: 'Document type', optional: true },
+            tags: { type: 'string', description: 'Comma-separated tags', optional: true },
+          },
+          required: ['content', 'title'],
+        },
+      },
+      {
+        name: 'store_web_content',
+        description: 'Store web content or articles',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', description: 'Full content' },
+            url: { type: 'string', description: 'Source URL' },
+            title: { type: 'string', description: 'Title', optional: true },
+            summary: { type: 'string', description: 'Optional summary', optional: true },
+          },
+          required: ['content', 'url'],
+        },
+      },
+      {
+        name: 'store_research_paper',
+        description: 'Store a research paper with academic metadata',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Paper title' },
+            authors: { type: 'string', description: 'Comma-separated authors' },
+            abstract: { type: 'string', description: 'Paper abstract' },
+            publication_date: { type: 'string', description: 'Publication date (YYYY-MM-DD)' },
+            tags: { type: 'string', description: 'Comma-separated tags', optional: true },
+            url: { type: 'string', description: 'Paper URL', optional: true },
+            journal: { type: 'string', description: 'Journal or conference', optional: true },
+          },
+          required: ['title', 'authors', 'abstract', 'publication_date'],
+        },
+      },
+      {
+        name: 'get_memory_stats',
+        description: 'Return live statistics about stored content',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'clear_memory',
+        description: 'Clear all or filtered content from memory',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content_type: { type: 'string', description: 'Restrict deletion to a specific content type', optional: true },
+            tags: { type: 'string', description: 'Delete content with specific tags', optional: true },
+          },
+        },
+      },
+      {
+        name: 'export_memory',
+        description: 'Export stored content in JSON, CSV, or Markdown format',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            format: {
+              type: 'string',
+              description: 'Export format (json, csv, markdown)',
+              optional: true,
+              enum: ['json', 'csv', 'markdown'],
+            },
+            content_type: { type: 'string', description: 'Filter by content type', optional: true },
+          },
+        },
+      },
+      {
+        name: 'find_related_content',
+        description: 'Find content related to a topic using vector similarity',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            topic: { type: 'string', description: 'Topic or snippet to search for' },
+            similarity_threshold: { type: 'number', description: 'Cosine similarity threshold (0-1)', optional: true },
+          },
+          required: ['topic'],
+        },
+      },
+      {
+        name: 'summarize_content',
+        description: 'Generate a statistical summary of stored content',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content_ids: { type: 'string', description: 'Comma-separated ids to summarise', optional: true },
+            content_type: { type: 'string', description: 'Limit summary to a content type', optional: true },
+          },
+        },
+      },
+      {
+        name: 'contextual_memory_search',
+        description: 'Search with user preference and time context',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            current_topic: { type: 'string', description: 'Conversation topic or query' },
+            user_preferences: { type: 'string', description: 'JSON payload describing user preferences', optional: true },
+            time_context: { type: 'string', description: 'JSON payload with temporal constraints', optional: true },
+          },
+          required: ['current_topic'],
+        },
+      },
+      {
+        name: 'consolidate_memories',
+        description: 'Deduplicate memories with matching titles per content type',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+    ];
+  }
+
   async handleStoreContent(args) {
     const { content, content_type, title, tags, metadata, source } = args;
 
-    const item = {
-      id: this.generateId(content_type),
-      content,
+    const tagList = this.parseTags(tags);
+    const metadataObject = this.parseMetadata(metadata);
+
+    const { id } = await this.insertContent({
       contentType: content_type,
       title: title || `Untitled ${content_type}`,
-      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
-      metadata: metadata ? JSON.parse(metadata) : {},
+      body: content,
+      tags: tagList,
+      metadata: metadataObject,
       source: source || 'mcp',
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+    });
 
     return {
-      content: [{
-        type: 'text',
-        text: `Content stored successfully with ID: ${item.id}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Content stored successfully with id ${id}.`,
+        },
+      ],
     };
   }
 
   async handleSearchMemory(args) {
     const { query, content_type, tags, limit = 10 } = args;
+    const requiredTags = this.parseTags(tags);
 
-    // Simulate search operation
-    const mockResults = [
-      {
-        id: 'content_1',
-        contentType: content_type || 'document',
-        title: `Search result for "${query}"`,
-        content: `Content related to ${query}`,
-        tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
-        score: 0.85
-      }
-    ];
+    const results = await this.searchContent(query, {
+      limit,
+      contentType: content_type,
+      requiredTags,
+    });
 
-    const resultText = mockResults.map((item, index) =>
-      `${index + 1}. [${item.contentType}] ${item.title}\n   ID: ${item.id}\n   Score: ${item.score?.toFixed(2) || 'N/A'}`
-    ).join('\n\n');
+    if (results.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No memories matched "${query}".`,
+          },
+        ],
+      };
+    }
+
+    const formatted = results
+      .map((result, index) => {
+        const tagsText = result.record.tags?.join(', ') || '—';
+        const snippet = result.record.body.replace(/\s+/g, ' ').slice(0, 160);
+        return `${index + 1}. [${result.record.contentType}] ${result.record.title}\n   Score: ${result.score.toFixed(3)}\n   Tags: ${tagsText}\n   Snippet: ${snippet}${snippet.length === 160 ? '…' : ''}`;
+      })
+      .join('\n\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: `Found ${mockResults.length} items:\n\n${resultText}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: formatted,
+        },
+      ],
     };
   }
 
   async handleGetContent(args) {
-    const { content_id } = args;
+    const db = await this.getDb();
+    const id = Number(args.content_id);
+    if (!Number.isFinite(id)) {
+      throw new Error('content_id must be a numeric value');
+    }
 
-    const item = {
-      id: content_id,
-      contentType: 'document',
-      title: 'Sample Content',
-      content: 'This is the content that was stored in memory.',
-      tags: ['sample', 'test'],
-      source: 'mcp',
-      createdAt: new Date(),
-      updatedAt: new Date()
+    const results = await db.find({ table: 'content', where: { id } });
+    if (results.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No content found with id ${id}.`,
+          },
+        ],
+      };
+    }
+
+    const record = results[0];
+    const payload = {
+      id: record.id,
+      contentType: record.contentType,
+      title: record.title,
+      tags: record.tags,
+      source: record.source,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+      metadata: record.metadata,
+      body: record.body,
     };
 
-    const details = `
-Content: ${item.title}
-Type: ${item.contentType}
-ID: ${item.id}
-Created: ${item.createdAt}
-Tags: ${item.tags.join(', ') || 'None'}
-Source: ${item.source}
-
-Content:
-${item.content}
-    `.trim();
-
     return {
-      content: [{
-        type: 'text',
-        text: details
-      }]
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(payload, null, 2),
+        },
+      ],
     };
   }
 
-  // Conversation Memory Handlers
   async handleStoreConversation(args) {
     const { messages, summary, tags } = args;
+    const parsedMessages = this.safeJson(messages, []);
+    if (!Array.isArray(parsedMessages)) {
+      throw new Error('messages must be a JSON array');
+    }
 
-    const conversation = {
-      id: this.generateId('conv'),
-      contentType: 'conversation',
-      title: summary || 'AI Conversation',
-      content: messages,
-      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
-      metadata: { messageCount: JSON.parse(messages).length },
-      createdAt: new Date(),
-      updatedAt: new Date()
+    const transcript = parsedMessages
+      .map(entry => {
+        if (typeof entry !== 'object' || !entry) return '';
+        const role = entry.role || 'user';
+        const content = entry.content || '';
+        return `${role}: ${content}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    const metadata = {
+      summary: summary || null,
+      messageCount: parsedMessages.length,
+      rawMessages: parsedMessages,
     };
 
+    const { id } = await this.insertContent({
+      contentType: 'conversation',
+      title: summary || `Conversation (${new Date().toLocaleString()})`,
+      body: transcript,
+      tags: this.parseTags(tags),
+      metadata,
+      source: 'conversation',
+    });
+
     return {
-      content: [{
-        type: 'text',
-        text: `Conversation stored successfully with ID: ${conversation.id}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Conversation stored with id ${id}.`,
+        },
+      ],
     };
   }
 
   async handleSearchConversations(args) {
-    const { query, tags } = args;
+    const { query, tags, limit = 10 } = args;
+    const results = await this.searchContent(query, {
+      limit,
+      contentType: 'conversation',
+      requiredTags: this.parseTags(tags),
+    });
 
-    const mockResults = [
-      {
-        id: 'conv_1',
-        title: `Conversation about ${query}`,
-        metadata: { messageCount: 5 }
-      }
-    ];
+    if (results.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No conversations matched "${query}".`,
+          },
+        ],
+      };
+    }
 
-    const resultText = mockResults.map((conv, index) =>
-      `${index + 1}. ${conv.title}\n   Messages: ${conv.metadata?.messageCount || 'Unknown'}\n   ID: ${conv.id}`
-    ).join('\n\n');
+    const output = results
+      .map((result, index) => {
+        const summary = result.record.metadata?.summary || result.record.title;
+        const messageCount = result.record.metadata?.messageCount ?? 'unknown';
+        return `${index + 1}. ${summary}\n   Messages: ${messageCount}\n   Score: ${result.score.toFixed(3)}`;
+      })
+      .join('\n\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: `Found ${mockResults.length} conversations:\n\n${resultText}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: output,
+        },
+      ],
     };
   }
 
-  // Document Management Handlers
   async handleStoreDocument(args) {
     const { content, title, author, document_type, tags } = args;
 
-    const document = {
-      id: this.generateId('doc'),
+    const metadata = {
+      author: author || null,
+      documentType: document_type || 'general',
+      wordCount: content.split(/\s+/).filter(Boolean).length,
+    };
+
+    const { id } = await this.insertContent({
       contentType: 'document',
       title,
-      content,
-      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
-      metadata: {
-        author: author || 'Unknown',
-        documentType: document_type || 'general',
-        wordCount: content.split(' ').length
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      body: content,
+      tags: this.parseTags(tags),
+      metadata,
+      source: 'document',
+    });
 
     return {
-      content: [{
-        type: 'text',
-        text: `Document "${title}" stored successfully with ID: ${document.id}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Document "${title}" stored with id ${id}.`,
+        },
+      ],
     };
   }
 
-  // Web Content Handlers
   async handleStoreWebContent(args) {
     const { content, url, title, summary } = args;
+    const body = summary ? `${summary}\n\nFull content:\n${content}` : content;
 
-    const webContent = {
-      id: this.generateId('web'),
-      contentType: 'web',
-      title: title || 'Web Content',
-      content: summary ? `${summary}\n\nFull Content:\n${content}` : content,
-      tags: ['web', 'online'],
-      metadata: {
-        url,
-        hasSummary: !!summary,
-        source: 'web'
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
+    const metadata = {
+      url,
+      hasSummary: Boolean(summary),
     };
 
+    const { id } = await this.insertContent({
+      contentType: 'web',
+      title: title || url,
+      body,
+      tags: ['web'],
+      metadata,
+      source: url,
+    });
+
     return {
-      content: [{
-        type: 'text',
-        text: `Web content from ${url} stored successfully with ID: ${webContent.id}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Web content from ${url} stored with id ${id}.`,
+        },
+      ],
     };
   }
 
-  // Research Paper Handlers (from Research Assistant MCP)
   async handleStoreResearchPaper(args) {
-    const { title, authors, abstract, publication_date, tags, url, journal } = args;
+    const {
+      title,
+      authors,
+      abstract,
+      publication_date,
+      tags,
+      url,
+      journal,
+    } = args;
 
-    const paper = {
-      id: this.generateId('paper'),
+    const metadata = {
+      authors,
+      publicationDate: publication_date,
+      url: url || null,
+      journal: journal || null,
+    };
+
+    const { id } = await this.insertContent({
       contentType: 'research',
       title,
-      content: abstract,
-      tags: tags ? tags.split(',').map(tag => tag.trim()) : [],
-      metadata: {
-        authors: authors,
-        publicationDate: publication_date,
-        url: url || '',
-        journal: journal || '',
-        source: 'research'
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
+      body: abstract,
+      tags: this.parseTags(tags),
+      metadata,
+      source: url || 'research',
+    });
 
     return {
-      content: [{
-        type: 'text',
-        text: `Research paper "${title}" stored successfully with ID: ${paper.id}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Research paper "${title}" stored with id ${id}.`,
+        },
+      ],
     };
   }
 
-  // Memory Management Handlers
-  async handleGetMemoryStats(args) {
-    const stats = `
-AI Memory Statistics:
-- Total Items: 25
-- By Type: conversation: 8, document: 10, web: 3, research: 4
-- Recent Activity (7 days): conversation: 3, document: 2
-- Top Tags: ai: 8, technical: 5, research: 4, project: 3
-    `.trim();
+  async handleGetMemoryStats() {
+    const db = await this.getDb();
+    const records = await db.getAll('content', Number.MAX_SAFE_INTEGER);
+
+    if (records.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No content has been stored yet.',
+          },
+        ],
+      };
+    }
+
+    const countsByType = new Map();
+    const tagFrequency = new Map();
+    let earliest = new Date();
+    let latest = new Date(0);
+
+    for (const record of records) {
+      countsByType.set(record.contentType, (countsByType.get(record.contentType) || 0) + 1);
+      const tags = (record.tags || []).map(tag => tag.toString());
+      for (const tag of tags) {
+        if (!tag) continue;
+        tagFrequency.set(tag, (tagFrequency.get(tag) || 0) + 1);
+      }
+      const createdAt = new Date(record.createdAt);
+      if (createdAt < earliest) earliest = createdAt;
+      if (createdAt > latest) latest = createdAt;
+    }
+
+    const typeLines = Array.from(countsByType.entries())
+      .map(([type, count]) => `  - ${type}: ${count}`)
+      .join('\n');
+
+    const topTags = Array.from(tagFrequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag, count]) => `${tag} (${count})`)
+      .join(', ');
+
+    const stats = [
+      `Total items: ${records.length}`,
+      'Breakdown by content type:',
+      typeLines || '  - (none)',
+      `Top tags: ${topTags || '—'}`,
+      `Range: ${earliest.toISOString().split('T')[0]} → ${latest.toISOString().split('T')[0]}`,
+    ].join('\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: stats
-      }]
+      content: [
+        {
+          type: 'text',
+          text: stats,
+        },
+      ],
     };
   }
 
   async handleClearMemory(args) {
+    const db = await this.getDb();
     const { content_type, tags } = args;
+    const tagFilters = this.parseTags(tags);
 
-    let message = 'Cleared all memory';
-    if (content_type) message = `Cleared ${content_type} content from memory`;
-    if (tags) message = `Cleared content with tags: ${tags}`;
+    const records = await db.getAll('content', Number.MAX_SAFE_INTEGER);
+    const idsToDelete = records
+      .filter(record => {
+        if (content_type && record.contentType !== content_type) return false;
+        if (tagFilters.length > 0) {
+          const recordTags = (record.tags || []).map(tag => tag.toString());
+          return tagFilters.every(tag => recordTags.includes(tag));
+        }
+        return true;
+      })
+      .map(record => record.id);
+
+    if (idsToDelete.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No matching memories found to clear.',
+          },
+        ],
+      };
+    }
+
+    await db.bulkDelete(idsToDelete, 'content');
 
     return {
-      content: [{
-        type: 'text',
-        text: `${message}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Cleared ${idsToDelete.length} memories${content_type ? ` of type ${content_type}` : ''}.`,
+        },
+      ],
     };
   }
 
   async handleExportMemory(args) {
+    const db = await this.getDb();
     const { format = 'json', content_type } = args;
 
-    const exportData = {
-      format,
-      content_type,
-      items: 15,
-      exported_at: new Date().toISOString()
-    };
+    const records = await db.getAll('content', Number.MAX_SAFE_INTEGER);
+    const filtered = content_type
+      ? records.filter(record => record.contentType === content_type)
+      : records;
 
-    return {
-      content: [{
-        type: 'text',
-        text: `Memory exported in ${format.toUpperCase()} format:\n\n${JSON.stringify(exportData, null, 2)}`
-      }]
-    };
+    if (filtered.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No content available for export with the provided filters.',
+          },
+        ],
+      };
+    }
+
+    switch (format) {
+      case 'json':
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(filtered, null, 2),
+            },
+          ],
+        };
+      case 'csv':
+        return {
+          content: [
+            {
+              type: 'text',
+              text: this.toCsv(filtered),
+            },
+          ],
+        };
+      case 'markdown':
+        return {
+          content: [
+            {
+              type: 'text',
+              text: this.toMarkdown(filtered),
+            },
+          ],
+        };
+      default:
+        throw new Error(`Unsupported export format: ${format}`);
+    }
   }
 
-  // Advanced Memory Features Handlers
   async handleFindRelatedContent(args) {
-    const { topic, similarity_threshold = 0.7 } = args;
+    const db = await this.getDb();
+    const { topic, similarity_threshold = 0.5 } = args;
 
-    const mockResults = [
-      {
-        id: 'content_1',
-        contentType: 'document',
-        title: `Related to "${topic}"`,
-        similarity: 0.85
-      }
-    ];
+    const matches = await db.vectorSearchText('content', topic, {
+      limit: 10,
+    });
 
-    const resultText = mockResults.map((item, index) =>
-      `${index + 1}. [${item.contentType}] ${item.title}\n   Similarity: ${(item.similarity * 100).toFixed(1)}%\n   ID: ${item.id}`
-    ).join('\n\n');
+    const filtered = matches.filter(match => match.score >= similarity_threshold);
+
+    if (filtered.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `No related memories exceeded the similarity threshold of ${similarity_threshold}.`,
+          },
+        ],
+      };
+    }
+
+    const output = filtered
+      .map((match, index) => {
+        const snippet = match.body.replace(/\s+/g, ' ').slice(0, 140);
+        return `${index + 1}. [${match.contentType}] ${match.title}\n   Score: ${match.score.toFixed(3)}\n   Snippet: ${snippet}${snippet.length === 140 ? '…' : ''}`;
+      })
+      .join('\n\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: `Found ${mockResults.length} related items:\n\n${resultText}`
-      }]
+      content: [
+        {
+          type: 'text',
+          text: output,
+        },
+      ],
     };
   }
 
   async handleSummarizeContent(args) {
+    const db = await this.getDb();
     const { content_ids, content_type } = args;
 
-    const summary = `
-Content Summary:
-- Total Items: 15
-- Content Types: conversation, document, web, research
-- Date Range: 2024-01-01 to 2024-09-30
-- Sample Titles: AI Conversation, Technical Documentation, Web Archive, Research Paper
-    `.trim();
+    let records = await db.getAll('content', Number.MAX_SAFE_INTEGER);
+    if (content_type) {
+      records = records.filter(record => record.contentType === content_type);
+    }
+
+    if (content_ids) {
+      const idSet = new Set(
+        content_ids
+          .split(',')
+          .map(id => Number(id.trim()))
+          .filter(Number.isFinite)
+      );
+      records = records.filter(record => idSet.has(record.id));
+    }
+
+    if (records.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No content matched the provided filters for summarisation.',
+          },
+        ],
+      };
+    }
+
+    const countsByType = new Map();
+    const tagFrequency = new Map();
+
+    for (const record of records) {
+      countsByType.set(record.contentType, (countsByType.get(record.contentType) || 0) + 1);
+      const tags = (record.tags || []).map(tag => tag.toString());
+      for (const tag of tags) {
+        if (!tag) continue;
+        tagFrequency.set(tag, (tagFrequency.get(tag) || 0) + 1);
+      }
+    }
+
+    const topTags = Array.from(tagFrequency.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag, count]) => `${tag} (${count})`)
+      .join(', ');
+
+    const typeSummary = Array.from(countsByType.entries())
+      .map(([type, count]) => `- ${type}: ${count}`)
+      .join('\n');
+
+    const highlighted = records
+      .slice(0, 5)
+      .map(record => `• ${record.title} [${record.contentType}]`)
+      .join('\n');
+
+    const summary = [`Total records: ${records.length}`, 'By type:', typeSummary || '- (none)', `Top tags: ${topTags || '—'}`, 'Sample titles:', highlighted].join('\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: summary
-      }]
+      content: [
+        {
+          type: 'text',
+          text: summary,
+        },
+      ],
     };
   }
 
   async handleContextualMemorySearch(args) {
-    const { current_topic, user_preferences, time_context } = args;
+    const { current_topic, user_preferences, time_context, limit = 5 } = args;
 
-    const context = {
-      currentTopic: current_topic,
-      userPreferences: user_preferences ? JSON.parse(user_preferences) : {},
-      timeContext: time_context ? JSON.parse(time_context) : {}
+    const preferences = this.safeJson(user_preferences, {});
+    const preferredTags = Array.isArray(preferences?.preferredTags)
+      ? preferences.preferredTags.map(tag => tag.toString())
+      : [];
+
+    const time = this.safeJson(time_context, {});
+    const dateRange = {
+      start: time?.after ? new Date(time.after) : undefined,
+      end: time?.before ? new Date(time.before) : undefined,
     };
 
-    const result = `
-Contextual Memory Search for "${current_topic}":
-- Found 3 relevant memories based on context
-- Context includes user preferences and time awareness
-- Memories ranked by contextual relevance
-    `.trim();
+    const results = await this.searchContent(current_topic, {
+      limit,
+      requiredTags: preferredTags,
+      dateRange,
+    });
+
+    if (results.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No contextual memories matched the provided topic and constraints.',
+          },
+        ],
+      };
+    }
+
+    const formatted = results
+      .map((result, index) => {
+        const created = new Date(result.record.createdAt).toISOString().split('T')[0];
+        const tags = result.record.tags?.join(', ') || '—';
+        return `${index + 1}. ${result.record.title}\n   Type: ${result.record.contentType}\n   Created: ${created}\n   Tags: ${tags}\n   Score: ${result.score.toFixed(3)}`;
+      })
+      .join('\n\n');
 
     return {
-      content: [{
-        type: 'text',
-        text: result
-      }]
+      content: [
+        {
+          type: 'text',
+          text: formatted,
+        },
+      ],
     };
   }
 
-  async handleConsolidateMemories(args) {
-    const result = `
-Memory Consolidation Completed:
-- Retained: 12 memories
-- Compressed: 3 memories
-- Discarded: 2 memories
-- Space saved: 15% improvement
-- Quality improvement: 1.2x
-Total memories after consolidation: 15
-    `.trim();
+  async handleConsolidateMemories() {
+    const db = await this.getDb();
+    const records = await db.getAll('content', Number.MAX_SAFE_INTEGER);
+
+    const grouped = new Map();
+    for (const record of records) {
+      const key = `${record.contentType}:${(record.title || '').trim().toLowerCase()}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(record);
+    }
+
+    const duplicates = [];
+    for (const entries of grouped.values()) {
+      if (entries.length <= 1) continue;
+      // Keep the most recent entry
+      entries.sort((a, b) => new Date(b.updatedAt).valueOf() - new Date(a.updatedAt).valueOf());
+      duplicates.push(...entries.slice(1));
+    }
+
+    if (duplicates.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No duplicate memories detected.',
+          },
+        ],
+      };
+    }
+
+    await db.bulkDelete(duplicates.map(record => record.id), 'content');
 
     return {
-      content: [{
-        type: 'text',
-        text: result
-      }]
+      content: [
+        {
+          type: 'text',
+          text: `Consolidated ${duplicates.length} duplicate memories across ${grouped.size} title clusters.`,
+        },
+      ],
     };
   }
 
-  // Helper methods
-  generateId(prefix = 'mem') {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  async insertContent({ contentType, title, body, tags, metadata, source }) {
+    const db = await this.getDb();
+    const now = new Date();
+
+    const record = {
+      contentType,
+      title,
+      body,
+      tagString: (tags || []).join(', '),
+      tags: tags || [],
+      metadata: metadata || {},
+      source: source || 'mcp',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const { id } = await db.insert(record, 'content');
+    return { id, record };
+  }
+
+  async searchContent(query, options = {}) {
+    const db = await this.getDb();
+    const {
+      limit = 10,
+      contentType,
+      requiredTags = [],
+      dateRange,
+    } = options;
+
+    const aggregated = new Map();
+
+    const applyFilters = record => {
+      if (contentType && record.contentType !== contentType) return false;
+      if (requiredTags.length > 0) {
+        const tags = (record.tags || []).map(tag => tag.toString());
+        if (!requiredTags.every(tag => tags.includes(tag))) return false;
+      }
+      if (dateRange?.start || dateRange?.end) {
+        const createdAt = new Date(record.createdAt);
+        if (dateRange.start && createdAt < dateRange.start) return false;
+        if (dateRange.end && createdAt > dateRange.end) return false;
+      }
+      return true;
+    };
+
+    const textResults = await db.search(query, {
+      table: 'content',
+      limit: limit * 3,
+    });
+
+    for (const result of textResults) {
+      if (!applyFilters(result)) continue;
+      const existing = aggregated.get(result.id) || {
+        record: result,
+        textScore: 0,
+        vectorScore: 0,
+      };
+      existing.record = result;
+      existing.textScore = Math.max(existing.textScore, result.score);
+      aggregated.set(result.id, existing);
+    }
+
+    const vectorResults = await db.vectorSearchText('content', query, {
+      limit: limit * 3,
+    });
+
+    for (const result of vectorResults) {
+      if (!applyFilters(result)) continue;
+      const existing = aggregated.get(result.id) || {
+        record: result,
+        textScore: 0,
+        vectorScore: 0,
+      };
+      existing.record = existing.record || result;
+      existing.vectorScore = Math.max(existing.vectorScore, result.score);
+      aggregated.set(result.id, existing);
+    }
+
+    const combined = Array.from(aggregated.values())
+      .map(entry => {
+        const score = entry.vectorScore * 0.6 + Math.log1p(entry.textScore) * 0.4;
+        return { record: entry.record, score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    return combined;
+  }
+
+  parseTags(input) {
+    if (!input) return [];
+    return input
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean);
+  }
+
+  parseMetadata(input) {
+    if (!input) return {};
+    const parsed = this.safeJson(input, {});
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return {};
+  }
+
+  safeJson(value, fallback) {
+    if (!value || typeof value !== 'string') return fallback;
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      console.warn('Failed to parse JSON payload:', error);
+      return fallback;
+    }
+  }
+
+  toCsv(records) {
+    const header = ['id', 'contentType', 'title', 'tags', 'createdAt', 'updatedAt'];
+    const rows = records.map(record => [
+      record.id,
+      record.contentType,
+      record.title.replace(/"/g, '""'),
+      (record.tags || []).join('|').replace(/"/g, '""'),
+      new Date(record.createdAt).toISOString(),
+      new Date(record.updatedAt).toISOString(),
+    ]);
+
+    const csvRows = [header, ...rows]
+      .map(columns => columns.map(column => `"${String(column)}"`).join(','))
+      .join('\n');
+
+    return csvRows;
+  }
+
+  toMarkdown(records) {
+    const lines = records.map(record => {
+      const tags = (record.tags || []).join(', ') || '—';
+      return `- **${record.title}** _(type: ${record.contentType}, tags: ${tags})_\n  ${record.body.slice(0, 160)}${record.body.length > 160 ? '…' : ''}`;
+    });
+
+    return ['# Exported Memories', ...lines].join('\n');
   }
 
   async start() {
@@ -667,13 +1096,8 @@ Total memories after consolidation: 15
     await this.server.connect(transport);
     console.error('Unified AI Memory MCP server running on stdio');
   }
-
-  async stop() {
-    await this.server.close();
-  }
 }
 
-// CLI interface
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new UnifiedAIMemoryMCPServer();
 
@@ -682,10 +1106,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 
-  // Graceful shutdown
-  process.on('SIGINT', async () => {
+  process.on('SIGINT', () => {
     console.error('\nShutting down Unified AI Memory MCP server...');
-    await server.stop();
     process.exit(0);
   });
 }

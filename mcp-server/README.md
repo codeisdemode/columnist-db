@@ -104,7 +104,7 @@ The MCP server uses the following database schema:
 - `abstract` (string): Paper abstract
 - `publicationDate` (date): Publication date
 - `tags` (string): Comma-separated tags
-- `vectorEmbedding` (json): Vector embeddings for semantic search
+- `abstract` (string): Indexed for both keyword and vector search using the BasicEmbeddingProvider
 
 ### Notes Table
 - `id` (string): Unique identifier

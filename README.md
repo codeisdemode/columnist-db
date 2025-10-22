@@ -253,6 +253,10 @@ On typical hardware:
 - Streaming data ingestion
 - Automated schema migrations
 
+## Publishing local changes
+
+If you're working from this repository snapshot, the updates live only on your machine until you push them. Follow the step-by-step checklist in [`docs/PUBLISHING.md`](docs/PUBLISHING.md) to configure your Git remote and publish the `work` branch to GitHub.
+
 ## License
 
 MIT License © 2025 codeisdemode

@@ -2,6 +2,7 @@
 // Implements vector embeddings, semantic search, and memory consolidation
 
 import * as crypto from 'crypto';
+import { MemoryScoring } from './scoring';
 import {
   MemoryRecord,
   MemoryQueryOptions,
@@ -22,8 +23,11 @@ export class MemoryManager {
   private documentChunks = new Map<string, DocumentChunk>();
   private embeddingProvider: EmbeddingProvider | null = null;
   private initialized = false;
+  private scoring: MemoryScoring;
 
-  constructor(private db: any) {}
+  constructor(private db: any, scoring?: MemoryScoring) {
+    this.scoring = scoring ?? new MemoryScoring();
+  }
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -52,7 +56,7 @@ export class MemoryManager {
       contentType,
       vector,
       metadata,
-      importance: this.calculateInitialImportance(content, contentType),
+      importance: this.calculateInitialImportance(content, contentType, metadata),
       accessCount: 0,
       lastAccessed: now,
       createdAt: now,
@@ -85,18 +89,21 @@ export class MemoryManager {
     }
 
     if (memory) {
-      // Update access stats
-      memory.accessCount++;
-      memory.lastAccessed = Date.now();
-      memory.importance = this.updateImportanceScore(memory);
-      memory.updatedAt = Date.now();
+      const updated = this.scoring.updateMemoryScores(memory, {
+        now: Date.now(),
+        accessDelta: 1
+      });
+
+      this.memories.set(memoryId, updated);
+      this.vectorIndex.set(memoryId, updated.vector);
+      memory = updated;
 
       if (this.db && this.db.memories) {
         await this.db.memories.update(memoryId, {
-          accessCount: memory.accessCount,
-          lastAccessed: memory.lastAccessed,
-          importance: memory.importance,
-          updatedAt: memory.updatedAt
+          accessCount: updated.accessCount,
+          lastAccessed: updated.lastAccessed,
+          importance: updated.importance,
+          updatedAt: updated.updatedAt
         });
       }
     }
@@ -124,7 +131,7 @@ export class MemoryManager {
     // Calculate similarity scores
     const scoredMemories = allMemories.map(memory => {
       const similarity = this.cosineSimilarity(contextVector, memory.vector);
-      const relevance = this.calculateRelevanceScore(memory, similarity);
+      const relevance = this.calculateRelevanceScore(memory, similarity, context);
 
       return {
         memory,
@@ -171,7 +178,12 @@ export class MemoryManager {
       const queryVector = await this.generateEmbedding(semanticSearch);
       const scoredMemories = memories.map(memory => {
         const similarity = this.cosineSimilarity(queryVector, memory.vector);
-        const relevance = this.calculateRelevanceScore(memory, similarity);
+        const relevance = this.calculateRelevanceScore(
+          memory,
+          similarity,
+          semanticSearch || query,
+          tags
+        );
 
         return {
           memory,
@@ -195,18 +207,16 @@ export class MemoryManager {
     }
 
     // Sort by importance and recency
+    const relevanceQuery = semanticSearch || query;
+
     return memories
-      .sort((a, b) => {
-        const scoreA = a.importance * (a.lastAccessed / Date.now());
-        const scoreB = b.importance * (b.lastAccessed / Date.now());
-        return scoreB - scoreA;
-      })
-      .slice(0, limit)
       .map(memory => ({
         memory,
-        relevance: memory.importance,
-        similarity: 0
-      }));
+        similarity: 0,
+        relevance: this.calculateRelevanceScore(memory, 0, relevanceQuery, tags)
+      }))
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, limit);
   }
 
   async consolidateMemoriesWithMetadata(metadata: any): Promise<any> {
@@ -342,41 +352,44 @@ export class MemoryManager {
     return embedding;
   }
 
-  private calculateInitialImportance(content: string, contentType: string): number {
-    let importance = 0.5; // Base importance
+  private calculateInitialImportance(content: string, contentType: string, metadata?: Record<string, unknown>): number {
+    const now = Date.now();
+    const tempRecord: MemoryRecord = {
+      id: 'temp',
+      content,
+      contentType,
+      vector: [] as number[],
+      metadata,
+      importance: 0.5,
+      accessCount: 0,
+      lastAccessed: now,
+      createdAt: now,
+      updatedAt: now,
+      category: metadata && typeof metadata === 'object' ? (metadata as any).category : undefined,
+      tags: metadata && typeof metadata === 'object' ? (metadata as any).tags : undefined
+    };
 
-    // Content length factor
-    const lengthFactor = Math.min(content.length / 1000, 1);
-    importance += lengthFactor * 0.2;
-
-    // Content type factor
-    if (contentType === 'important' || contentType === 'critical') {
-      importance += 0.3;
-    }
-
-    return Math.min(importance, 1);
+    return this.scoring.calculateImportanceScore(tempRecord, { now });
   }
 
   private updateImportanceScore(memory: MemoryRecord): number {
-    const baseImportance = memory.importance;
-    const accessFactor = Math.min(memory.accessCount / 10, 0.3);
-    const recencyFactor = Math.min((Date.now() - memory.createdAt) / (30 * 24 * 60 * 60 * 1000), 0.2);
-
-    return Math.min(baseImportance + accessFactor + recencyFactor, 1);
+    const updated = this.scoring.updateMemoryScores(memory, { now: Date.now() });
+    this.memories.set(memory.id, updated);
+    return updated.importance;
   }
 
-  private calculateRelevanceScore(memory: MemoryRecord, similarity: number): number {
-    const similarityWeight = 0.6;
-    const importanceWeight = 0.3;
-    const recencyWeight = 0.1;
-
-    const recency = Math.min((Date.now() - memory.lastAccessed) / (7 * 24 * 60 * 60 * 1000), 1);
-
-    return (
-      similarity * similarityWeight +
-      memory.importance * importanceWeight +
-      (1 - recency) * recencyWeight
-    );
+  private calculateRelevanceScore(
+    memory: MemoryRecord,
+    similarity: number,
+    query?: string,
+    queryTags: string[] = []
+  ): number {
+    return this.scoring.calculateRelevanceScore(memory, {
+      similarity,
+      query,
+      queryTags,
+      now: Date.now()
+    });
   }
 
   private cosineSimilarity(vecA: number[], vecB: number[]): number {
@@ -466,7 +479,7 @@ export class MemoryManager {
       contentType: 'document',
       vector: await this.generateEmbedding(content),
       metadata: { ...metadata, originalLength: content.length },
-      importance: this.calculateInitialImportance(content, 'document'),
+      importance: this.calculateInitialImportance(content, 'document', metadata),
       accessCount: 0,
       lastAccessed: nowTimestamp,
       createdAt: nowTimestamp,
