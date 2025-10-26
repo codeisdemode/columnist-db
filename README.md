@@ -259,4 +259,4 @@ If you're working from this repository snapshot, the updates live only on your m
 
 ## License
 
-MIT License © 2025 codeisdemode
+© 2025 codeisdemode
