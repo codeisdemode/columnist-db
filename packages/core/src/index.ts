@@ -1,4 +1,4 @@
-export { Columnist, defineTable } from './columnist';
+export { Columnist, ColumnistDB, ColumnistDBError, defineTable } from './columnist';
 export type { SchemaDefinition } from './columnist';
 export type { 
   TableDefinition, 
@@ -7,7 +7,8 @@ export type {
   InsertResult,
   BulkOperationResult,
   WhereCondition,
-  InferTableType
+  InferTableType,
+  ColumnistDBOptions
 } from './types';
 
 export { SyncManager, BaseSyncAdapter } from './sync';

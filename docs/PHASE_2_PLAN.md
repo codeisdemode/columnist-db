@@ -108,6 +108,13 @@ Building on the solid foundation established in Phase 1, Phase 2 focuses on enha
 - [ ] Add performance monitoring
 - [ ] Update documentation and examples
 
+### Developer Experience Track (Runs alongside Sprints 1-2)
+
+- [ ] **Hooks Test Suite** – add Vitest + RTL coverage for `packages/hooks` (`useColumnist`, `useDocumentSearch`, `useLiveQuery`, etc.) using the `examples/browser-memory-assistant` schema as a fixture.
+- [ ] **README Walkthroughs** – document a full install + test flow that jumps between `/chat`, `/chat-enhanced`, and the new `examples/` folders so new devs know which CLI to run (`npm run example:browser-memory-assistant`, `npm run example:mcp-memory-server`).
+- [ ] **CLI Scaffold** – outline `create-columnist-app` commands (prompt for schema name, generate fake-indexeddb tests, wire tsconfig aliases) and track tasks/issues in `docs/ROADMAP_LOCAL_RAG.md`.
+- [ ] **Telemetry Hooks** – describe how the CLI and README link to `Columnist.getErrorRecoveryStats()` so DX improvements stay observable.
+
 ## 🔧 Technical Implementation Details
 
 ### Node.js Compatibility

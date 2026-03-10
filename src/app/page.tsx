@@ -1,7 +1,8 @@
 'use client';
 
 // Research Assistant Application
-import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useState, useEffect, useCallback } from 'react';
 import { useResearchDB } from '@/hooks/useResearchDB';
 import { Paper, Note } from '@/lib/database';
 import { DatabaseTest } from '@/components/DatabaseTest';
@@ -14,9 +15,7 @@ export default function ResearchAssistant() {
     addNote,
     searchPapers,
     getAllPapers,
-    getAllNotes,
-    getNotesForPaper,
-    deletePaper
+    getAllNotes
   } = useResearchDB();
 
   const [papers, setPapers] = useState<Paper[]>([]);
@@ -26,7 +25,7 @@ export default function ResearchAssistant() {
   const [activeTab, setActiveTab] = useState<'papers' | 'notes' | 'search'>('papers');
 
   // Load papers and notes on component mount
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [loadedPapers, loadedNotes] = await Promise.all([
         getAllPapers(),
@@ -37,7 +36,7 @@ export default function ResearchAssistant() {
     } catch (err) {
       console.error('Failed to load data:', err);
     }
-  };
+  }, [getAllNotes, getAllPapers]);
 
   // Handle search
   const handleSearch = async () => {
@@ -88,7 +87,7 @@ export default function ResearchAssistant() {
     if (!isLoading && !error) {
       loadData();
     }
-  }, [isLoading, error]);
+  }, [error, isLoading, loadData]);
 
   if (isLoading) {
     return (
@@ -116,8 +115,32 @@ export default function ResearchAssistant() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">Research Assistant</h1>
-          <p className="text-gray-600">Organize and search your research papers with AI-powered semantic search</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Columnist-DB Demos</h1>
+              <p className="text-gray-600">Showcasing client-side vector database capabilities</p>
+            </div>
+            <nav className="flex gap-4">
+              <Link
+                href="/"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Research Assistant
+              </Link>
+              <Link
+                href="/chat"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                AI Chat with Knowledge Base
+              </Link>
+              <Link
+                href="/gpt-5-chat"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                GPT-5 Enhanced Chat
+              </Link>
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -263,7 +286,7 @@ export default function ResearchAssistant() {
           {activeTab === 'search' && (
             <div className="p-6">
               <h2 className="text-xl font-semibold mb-4">
-                Search Results for "{searchQuery}"
+                Search Results for &quot;{searchQuery}&quot;
               </h2>
               {searchResults.length === 0 ? (
                 <p className="text-gray-500">No results found. Try a different search term.</p>

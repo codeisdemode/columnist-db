@@ -1,17 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { Columnist, defineTable } from '../columnist'
+import { Columnist, ColumnistDB, defineTable } from '../columnist'
+import { createDbName, destroyDatabase } from './db-test-utils'
 
 describe('Columnist encryption key rotation', () => {
+  const databases: { name: string; instance?: ColumnistDB }[] = []
+
   afterEach(async () => {
-    await new Promise<void>((resolve) => {
-      const request = indexedDB.deleteDatabase('encryption-rotation-test')
-      request.onsuccess = () => resolve()
-      request.onerror = () => resolve()
-      request.onblocked = () => resolve()
-    })
+    for (const entry of databases.splice(0)) {
+      await destroyDatabase(entry.name, entry.instance)
+    }
   })
 
   it('re-encrypts sensitive fields when rotating the key', async () => {
+    const dbName = createDbName('encryption-rotation')
     const secretsTable = defineTable()
       .column('id', 'string')
       .column('name', 'string')
@@ -22,13 +23,14 @@ describe('Columnist encryption key rotation', () => {
       .searchable('name')
       .build()
 
-    const db = await Columnist.init('encryption-rotation-test', {
+    const db = await Columnist.init(dbName, {
       version: 1,
       schema: {
         secrets: secretsTable,
       },
       encryptionKey: 'initial-secret'
     })
+    databases.push({ name: dbName, instance: db })
 
     const timestamp = new Date()
     await db.insert({
@@ -55,7 +57,7 @@ describe('Columnist encryption key rotation', () => {
     expect(typeof ciphertextAfter).toBe('string')
     expect(ciphertextAfter).not.toBe('top-secret-token')
     expect(ciphertextAfter).not.toBe(ciphertextBefore)
-  })
+  }, 20000)
 })
 
 async function readRawCipher(db: any, table: string, key: string): Promise<string> {

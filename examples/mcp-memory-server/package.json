@@ -1,0 +1,19 @@
+{
+  "name": "mcp-memory-server-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "columnist-db-core": "file:../../packages/core",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.2",
+    "typescript": "^5.7.0"
+  }
+}
+

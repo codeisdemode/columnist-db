@@ -38,7 +38,7 @@ export class RAGDatabase {
 
     this.options = {
       ...parsed,
-      embeddingProvider,
+      embeddingProvider: embeddingProvider ?? undefined,
     };
 
     this.cacheDurationMs = this.options.cacheDurationMs;

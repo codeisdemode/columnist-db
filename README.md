@@ -38,41 +38,58 @@ For React or modern frontends:
 npm install columnist-db-hooks
 ```
 
+## Repo Validation
+
+For this repository checkout, the verified release workflow is:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run pack:check
+```
+
 ## Quick Start
 
 ```typescript
-import { Columnist } from "columnist-db-core";
+import { Columnist, defineTable } from "columnist-db-core";
 
-const schema = {
-  memories: {
-    id: { type: "string", primaryKey: true },
-    content: "string",
-    contentType: "string",
-    embeddings: "vector",
-    tags: "string[]",
-    createdAt: "date",
+const memoriesTable = defineTable()
+  .column("id", "string")
+  .column("content", "string")
+  .column("summary", "string")
+  .column("createdAt", "date")
+  .primaryKey("id")
+  .searchable("content", "summary")
+  .build();
+
+const db = await Columnist.init("my-app", {
+  version: 1,
+  schema: {
+    memories: memoriesTable,
   },
-};
-
-const db = await Columnist.init("my-app", { schema });
-
-await db.insert("memories", {
-  id: "1",
-  content: "Building a local-first AI assistant",
-  contentType: "note",
-  embeddings: [0.1, 0.2, 0.3],
-  tags: ["ai", "memory"],
-  createdAt: new Date(),
 });
 
-const results = await db.search("memories", {
-  query: "AI assistant",
-  vector: [0.1, 0.2, 0.25],
-  similarityThreshold: 0.7,
+await db.insert({
+  id: "memory-1",
+  content: "Building a local-first AI assistant",
+  summary: "Local-first AI assistant note",
+  createdAt: new Date(),
+}, "memories");
+
+const results = await db.search("AI assistant", {
+  table: "memories",
+  limit: 5,
 });
 
 console.log(results);
 ```
+
+## Example Apps
+
+- `examples/browser-memory-assistant` – standalone Next.js UI powered by `useBrowserMemoryAssistant`. Install dependencies inside the folder and run it with `npm run example:browser-memory-assistant`.
+- `examples/mcp-memory-server` – CLI/stdio server that wires Columnist search + ingestion into Model Context Protocol tools. Start it with `npm run example:mcp-memory-server` after installing its local dependencies.
 
 ## Document Processing (RAG Integration)
 

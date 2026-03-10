@@ -7,13 +7,19 @@
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
+    "incremental": false,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmitOnError": true
+    "noEmitOnError": true,
+    "baseUrl": ".",
+    "paths": {
+      "columnist-db-core": ["../../core/dist/index"],
+      "columnist-db-hooks": ["../../hooks/dist/index"]
+    }
   },
   "include": [
     "src/**/*"

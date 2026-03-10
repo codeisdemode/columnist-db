@@ -1,5 +1,10 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url))
+const resolveFromRoot = (relativePath: string) => path.resolve(rootDir, relativePath)
 
 export default defineConfig({
   plugins: [react()],
@@ -21,8 +26,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': '/src',
-      '@lib': '/lib'
+      '@': resolveFromRoot('src'),
+      '@lib': resolveFromRoot('lib'),
+      'columnist-db-core': resolveFromRoot('packages/core/src'),
+      'columnist-db-plugin-openai-embedding': resolveFromRoot('packages/plugins/openai-embedding/src'),
+      'columnist-db-hooks': resolveFromRoot('packages/hooks/src')
     }
   }
 })

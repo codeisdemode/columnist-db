@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "./",
+    "paths": {
+      "columnist-db-core": ["../../packages/core/src"],
+      "columnist-db-hooks": ["../../packages/hooks/src"],
+      "columnist-db-plugin-openai-embedding": ["../../packages/plugins/openai-embedding/src"]
+    },
+    "jsx": "preserve",
+    "types": ["node"]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}
+

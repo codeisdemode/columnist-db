@@ -204,7 +204,7 @@ const ColumnTypeSchemas = {
   string: z.string(),
   number: z.number(),
   boolean: z.boolean(),
-  date: z.date(),
+  date: z.coerce.date(),
   json: z.unknown()
 } as const
 
@@ -431,6 +431,15 @@ function suggestNodeJSCompatibility(): string {
     return 'For Node.js usage, install fake-indexeddb: npm install --save-dev fake-indexeddb';
   }
   return 'This appears to be a non-browser environment. Columnist requires IndexedDB.';
+}
+
+function toArrayBufferView(input: Uint8Array): Uint8Array<ArrayBuffer> {
+  const { buffer, byteOffset, byteLength } = input
+  const stableBuffer = buffer instanceof ArrayBuffer
+    ? buffer.slice(byteOffset, byteOffset + byteLength)
+    : new Uint8Array(input).buffer
+
+  return new Uint8Array(stableBuffer) as Uint8Array<ArrayBuffer>
 }
 
 // In-memory storage fallback for Node.js environments
@@ -1752,35 +1761,28 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       return this.getAllInMemory(table, def, limit);
     }
 
-    // Original IndexedDB implementation
-    const out: (T & { id: number })[] = []
     const tx = this.db!.transaction([table], "readonly")
     const store = tx.objectStore(table)
-    const req = store.openCursor()
-    return new Promise((resolve, reject) => {
-      req.onsuccess = async () => {
-        const cursor = req.result
-        if (cursor) {
-          const value: any = cursor.value
-          value.id = cursor.primaryKey as number
 
-          // Decrypt sensitive fields after retrieval
-          const decryptedValue = await this.decryptSensitiveFields(value, def)
-          // Decode from storage format using codec if available
-          const decodedValue = this.decodeRecordFromStorage(decryptedValue, def)
-          out.push(decodedValue as T & { id: number })
+    const normalizedLimit = Number.isFinite(limit) ? limit : 4294967295
+    const cappedLimit = Math.min(Math.max(0, normalizedLimit), 4294967295)
 
-          if (out.length >= limit) {
-            resolve(out)
-            return
-          }
-          cursor.continue()
-        } else {
-          resolve(out)
-        }
-      }
-      req.onerror = () => reject(req.error)
-    })
+    const [records, keys] = await Promise.all([
+      requestToPromise<any[]>(store.getAll(undefined, cappedLimit)),
+      requestToPromise<IDBValidKey[]>(store.getAllKeys(undefined, cappedLimit))
+    ])
+
+    const out: (T & { id: number })[] = []
+
+    for (let i = 0; i < records.length; i++) {
+      const value: any = records[i]
+      value.id = keys[i] as number
+      const decryptedValue = await this.decryptSensitiveFields(value, def)
+      const decodedValue = this.decodeRecordFromStorage(decryptedValue, def)
+      out.push(decodedValue as T & { id: number })
+    }
+
+    return out
   }
 
   // In-memory implementation of getAll
@@ -2770,10 +2772,12 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
       ['deriveKey']
     )
 
+    const saltBuffer = toArrayBufferView(salt instanceof Uint8Array ? salt : new Uint8Array(salt))
+
     return window.crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt: new Uint8Array(salt).buffer,
+        salt: saltBuffer,
         iterations: 310000,
         hash: 'SHA-256'
       },
@@ -2802,12 +2806,14 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
 
     this.ensureDb()
 
-    for (const [tableName, def] of tables) {
-      const tx = this.db!.transaction([tableName], 'readwrite')
-      const store = tx.objectStore(tableName)
+    for (const [tableName] of tables) {
+      const readTx = this.db!.transaction([tableName], 'readonly')
+      const readStore = readTx.objectStore(tableName)
+
+      const records: Array<{ key: IDBValidKey; value: Record<string, unknown> }> = []
 
       await new Promise<void>((resolve, reject) => {
-        const cursorRequest = store.openCursor()
+        const cursorRequest = readStore.openCursor()
         cursorRequest.onerror = () => reject(cursorRequest.error)
         cursorRequest.onsuccess = () => {
           const cursor = cursorRequest.result
@@ -2816,21 +2822,33 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
             return
           }
 
-          const record = cursor.value as Record<string, unknown>
-          ;(async () => {
-            try {
-              const decrypted = await this.decryptSensitiveFieldsWithKey(record, oldKey)
-              const reencrypted = await this.encryptSensitiveFieldsWithKey(decrypted, newKey)
-              await requestToPromise(cursor.update(reencrypted as any))
-              cursor.continue()
-            } catch (error) {
-              reject(error instanceof Error ? error : new Error(String(error)))
-            }
-          })()
+          records.push({ key: cursor.primaryKey, value: cursor.value as Record<string, unknown> })
+          cursor.continue()
         }
       })
 
-      await awaitTransaction(tx)
+      await awaitTransaction(readTx)
+
+      if (records.length === 0) {
+        continue
+      }
+
+      const updatedRecords: Array<{ key: IDBValidKey; value: Record<string, unknown> }> = []
+
+      for (const entry of records) {
+        const decrypted = await this.decryptSensitiveFieldsWithKey(entry.value, oldKey)
+        const reencrypted = await this.encryptSensitiveFieldsWithKey(decrypted, newKey)
+        updatedRecords.push({ key: entry.key, value: reencrypted })
+      }
+
+      const writeTx = this.db!.transaction([tableName], 'readwrite')
+      const writeStore = writeTx.objectStore(tableName)
+
+      for (const entry of updatedRecords) {
+        await requestToPromise(writeStore.put(entry.value as any))
+      }
+
+      await awaitTransaction(writeTx)
     }
   }
 
@@ -3811,7 +3829,10 @@ export class ColumnistDB<Schema extends SchemaDefinition = SchemaDefinition> {
         this.bulkUpdate(updates as any[], table as string),
       
       bulkDelete: <K extends keyof S>(ids: number[], table: K) => 
-        this.bulkDelete(ids, table as string)
+        this.bulkDelete(ids, table as string),
+
+      getOptions: () =>
+        this.getOptions()
     }
   }
 

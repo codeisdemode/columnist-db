@@ -19,9 +19,36 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "columnist-db-core": ["./packages/core/src"],
+      "columnist-db-plugin-openai-embedding": ["./packages/plugins/openai-embedding/src"],
+      "columnist-db-hooks": ["./packages/hooks/src"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "examples/**/*.ts",
+    "examples/**/*.tsx",
+    "packages/core/src/**/*.ts",
+    "packages/core/src/**/*.tsx",
+    "packages/hooks/src/**/*.ts",
+    "packages/hooks/src/**/*.tsx",
+    "packages/rag-db/src/**/*.ts",
+    "packages/rag-db/src/**/*.tsx",
+    "packages/plugins/openai-embedding/src/**/*.ts",
+    "packages/plugins/openai-embedding/src/**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "lib/**",
+    "test/**",
+    "test-scripts/**",
+    "packages/**/__tests__/**",
+    "packages/rag-db/demo/**",
+    "packages/rag-db/examples/**",
+    "packages/plugins/convex-sync/**"
+  ]
 }

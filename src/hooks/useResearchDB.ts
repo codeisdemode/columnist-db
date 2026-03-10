@@ -15,7 +15,7 @@ export function useResearchDB() {
           return;
         }
 
-        const db = await getResearchDB();
+        await getResearchDB();
         setIsLoading(false);
       } catch (err) {
         console.error('Database initialization failed:', err);
@@ -117,12 +117,12 @@ export function useResearchDB() {
 
         // Simple text search across title and abstract
         const searchTerm = query.toLowerCase();
-        results = allPapers.filter((paper: any) => {
+        results = ((allPapers as unknown as Array<Partial<Paper>>).filter((paper) => {
           return (
             paper.title?.toLowerCase().includes(searchTerm) ||
             paper.abstract?.toLowerCase().includes(searchTerm)
           );
-        });
+        }) as Paper[]);
       }
 
       return results as Paper[];
@@ -146,7 +146,7 @@ export function useResearchDB() {
       }
 
       const papers = await db.getAll('papers');
-      return papers as Paper[];
+      return papers as unknown as Paper[];
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to fetch papers');
     }
@@ -166,7 +166,7 @@ export function useResearchDB() {
       }
 
       const notes = await db.getAll('notes');
-      return notes as Note[];
+      return notes as unknown as Note[];
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to fetch notes');
     }
@@ -208,7 +208,29 @@ export function useResearchDB() {
         throw new Error('Database delete operation not available');
       }
 
-      await db.delete(paperId, 'papers');
+      const deleteRecord = async (recordId: number | string) => {
+        await (db.delete as unknown as (id: number | string, table: string) => Promise<void>)(
+          recordId,
+          'papers'
+        );
+      };
+
+      if (typeof db.find !== 'function') {
+        await deleteRecord(paperId);
+        return;
+      }
+
+      const matchingPapers = await db.find({
+        table: 'papers',
+        where: { id: paperId }
+      });
+
+      if (!Array.isArray(matchingPapers) || matchingPapers.length === 0) {
+        await deleteRecord(paperId);
+        return;
+      }
+
+      await deleteRecord(matchingPapers[0].id);
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to delete paper');
     }

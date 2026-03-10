@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Columnist, defineTable, BasicEmbeddingProvider } from 'columnist-db-core';
+import { BasicEmbeddingProvider, Columnist, defineTable } from 'columnist-db-core';
 
 const EMBEDDING_DIMENSIONS = 128;
 
@@ -73,73 +73,9 @@ export type Note = {
   updatedAt: Date;
 };
 
-type ResolvedEmbeddingProvider = {
-  generateEmbedding: (text: string) => Promise<Float32Array>;
-  dimensions: number;
-  model: string;
-};
-
-let embeddingProvider: ResolvedEmbeddingProvider | null = null;
-const embeddingCache = new Map<string, Float32Array>();
-let researchDBPromise: Promise<any> | null = null;
-
-function ensureEmbeddingProvider(): ResolvedEmbeddingProvider {
-  if (!embeddingProvider) {
-    const provider = new BasicEmbeddingProvider();
-    embeddingProvider = {
-      generateEmbedding: (text: string) => provider.generateEmbedding(text),
-      dimensions: provider.getDimensions(),
-      model: provider.getModel(),
-    };
-  }
-
-  if (embeddingProvider.dimensions !== EMBEDDING_DIMENSIONS) {
-    throw new Error(`Embedding provider dimension mismatch. Expected ${EMBEDDING_DIMENSIONS}, received ${embeddingProvider.dimensions}`);
-  }
-
-  return embeddingProvider;
-}
-
-async function getCachedEmbedding(text: string): Promise<Float32Array> {
-  const provider = ensureEmbeddingProvider();
-  const key = text.trim();
-
-  if (!key) {
-    return new Float32Array(provider.dimensions);
-  }
-
-  const cached = embeddingCache.get(key);
-  if (cached) {
-    return new Float32Array(cached);
-  }
-
-  const vector = await provider.generateEmbedding(text);
-  if (!(vector instanceof Float32Array) || vector.length !== provider.dimensions) {
-    throw new Error(`Embedding provider returned vector with dimension ${vector.length}, expected ${provider.dimensions}`);
-  }
-
-  const stored = new Float32Array(vector);
-  embeddingCache.set(key, stored);
-  return new Float32Array(stored);
-}
-
-export const setEmbeddingProvider = (provider: {
-  generateEmbedding(text: string): Promise<Float32Array>;
-  getDimensions(): number;
-  getModel?(): string;
-}): void => {
-  const dimensions = provider.getDimensions();
-  if (dimensions !== EMBEDDING_DIMENSIONS) {
-    throw new Error(`Custom embedding provider must use ${EMBEDDING_DIMENSIONS}-dimension vectors to match the schema.`);
-  }
-
-  embeddingProvider = {
-    generateEmbedding: (text: string) => provider.generateEmbedding(text),
-    dimensions,
-    model: typeof provider.getModel === 'function' ? provider.getModel() : 'custom-provider',
-  };
-  embeddingCache.clear();
-};
+type ResearchDB = Awaited<ReturnType<typeof Columnist.init>>;
+let researchDBPromise: Promise<ResearchDB> | null = null;
+const embeddingProvider = new BasicEmbeddingProvider();
 
 export const getResearchDB = async () => {
   if (typeof window === 'undefined') {
@@ -156,8 +92,7 @@ export const getResearchDB = async () => {
         },
       });
 
-      ensureEmbeddingProvider();
-      db.registerEmbedder('papers', async (text: string) => getCachedEmbedding(text));
+      db.registerEmbedder('papers', async (text: string) => embeddingProvider.generateEmbedding(text));
 
       return db;
     })();
@@ -167,15 +102,14 @@ export const getResearchDB = async () => {
 };
 
 export const generateEmbedding = async (text: string): Promise<number[]> => {
-  const vector = await getCachedEmbedding(text);
+  const vector = await embeddingProvider.generateEmbedding(text);
   return Array.from(vector);
 };
 
 export const getEmbeddingMetadata = () => {
-  const provider = ensureEmbeddingProvider();
   return {
-    model: provider.model,
-    dimensions: provider.dimensions,
-    cacheSize: embeddingCache.size,
+    model: embeddingProvider.getModel(),
+    dimensions: EMBEDDING_DIMENSIONS,
+    cacheSize: 0,
   };
 };

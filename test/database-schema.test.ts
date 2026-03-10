@@ -12,7 +12,7 @@ describe('Database Schema Validation', () => {
     tags: z.string(),
     createdAt: z.date(),
     updatedAt: z.date()
-  })
+  }).strict()
 
   const noteSchema = z.object({
     id: z.string(),

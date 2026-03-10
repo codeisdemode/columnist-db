@@ -66,7 +66,7 @@ export function createTableCodec(
   for (const [column, type] of Object.entries(columnTypes)) {
     switch (type) {
       case "date":
-        shape[column] = z.date()
+        shape[column] = z.coerce.date()
         break
       case "json":
         shape[column] = z.unknown()

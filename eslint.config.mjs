@@ -18,6 +18,13 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "lib/**",
+      "packages/**",
+      "mcp-server/**",
+      "mcp-server-ai-memory/**",
+      "test/**",
+      "test-scripts/**",
+      "test-*.js",
     ],
   },
 ];

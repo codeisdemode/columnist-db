@@ -5,8 +5,8 @@ export type ColumnType = "string" | "number" | "boolean" | "date" | "json"
 export interface TableDefinition {
   columns: Record<string, ColumnType | { type: 'vector'; dimension: number }>
   primaryKey?: string
-  searchableFields?: string[]
-  secondaryIndexes?: string[]
+  searchableFields?: readonly string[]
+  secondaryIndexes?: readonly string[]
   validation?: z.ZodSchema
   vector?: {
     field: string
@@ -54,7 +54,7 @@ export interface InsertResult {
 }
 
 export interface ColumnistDBOptions {
-  databaseName: string
+  databaseName?: string
   autoInitialize?: boolean
   sync?: {
     enabled?: boolean

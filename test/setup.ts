@@ -16,6 +16,13 @@ if (!globalThis.crypto || !(globalThis.crypto as Crypto).subtle) {
   })
 }
 
+if (typeof window !== 'undefined' && (!window.crypto || !(window.crypto as Crypto).subtle)) {
+  Object.defineProperty(window, 'crypto', {
+    value: webcrypto as Crypto,
+    configurable: true,
+  })
+}
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({

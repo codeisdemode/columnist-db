@@ -2,6 +2,11 @@
 
 ## 🎯 Quick Start Examples
 
+### New Reference Projects
+
+- `examples/browser-memory-assistant` – Next.js UI that mirrors `/chat-enhanced` but lives in its own workspace. Run it with `npm run example:browser-memory-assistant` after installing dependencies inside the folder.
+- `examples/mcp-memory-server` – Minimal stdio server that exposes Columnist search/insert tools over the MCP protocol. Start it with `npm run example:mcp-memory-server`.
+
 ### Basic Memory Operations
 
 ```typescript

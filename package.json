@@ -4,15 +4,24 @@
   "description": "AI Memory Tool for LLM Context Management - Persistent memory storage for AI assistants",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "dev": "next dev",
+    "build": "npm run build:packages && npm run typecheck && next build",
+    "build:packages": "npm --prefix packages/core run clean && npm --prefix packages/core run build && npm --prefix packages/hooks run clean && npm --prefix packages/hooks run build && npm --prefix packages/plugins/openai-embedding run clean && npm --prefix packages/plugins/openai-embedding run build && npm --prefix packages/rag-db run clean && npm --prefix packages/rag-db run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint src examples --ext .ts,.tsx,.mjs",
+    "pack:check": "npm run build:packages && node -e \"const { execSync } = require('child_process'); ['packages/core','packages/hooks','packages/plugins/openai-embedding','packages/rag-db'].forEach((dir) => execSync('npm pack --dry-run', { cwd: dir, stdio: 'inherit' }));\"",
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "benchmark:queries": "node ./node_modules/tsx/dist/cli.mjs test-scripts/query-benchmark.ts",
+    "benchmark:queries:10k": "node ./node_modules/tsx/dist/cli.mjs test-scripts/query-benchmark.ts --records=10000 --runs=20 --warmup=5",
+    "example:browser-memory-assistant": "npm --prefix examples/browser-memory-assistant run dev",
+    "example:mcp-memory-server": "npm --prefix examples/mcp-memory-server run dev"
   },
   "dependencies": {
     "columnist-db-core": "^1.2.3",
@@ -23,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.53.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
@@ -37,6 +47,7 @@
     "fake-indexeddb": "^6.2.2",
     "jsdom": "^27.0.1",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }

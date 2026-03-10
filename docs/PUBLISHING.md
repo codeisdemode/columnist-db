@@ -1,23 +1,55 @@
-# Publishing Local Changes to GitHub
+# Publishing Changes
 
-The feature work tracked on the `work` branch only exists in this local repository snapshot. The public GitHub project at `https://github.com/codeisdemode/columnist-db` still reflects its default branch because the updates have not been pushed upstream.
+Use this checklist when you want to publish the current local state of `columnist-db`.
 
-To publish the changes:
+## 1. Verify The Local Tree
 
-1. Make sure you have a fork with push access on GitHub (e.g., `git@github.com:codeisdemode/columnist-db.git`).
-2. Add it as a remote if it is not already configured:
-   ```bash
-   git remote add origin git@github.com:codeisdemode/columnist-db.git
-   ```
-3. Confirm the remote is reachable by listing configured remotes:
-   ```bash
-   git remote -v
-   ```
-   If `origin` is missing, repeat step 2 with the correct SSH or HTTPS URL for your fork.
-4. Push the branch that contains the new commits (use `--set-upstream` the first time so future pushes can omit the remote/branch):
-   ```bash
-   git push --set-upstream origin work
-   ```
-5. Open a pull request from `work` to your main branch on GitHub to review and merge the changes.
+```bash
+git status --short
+git branch -vv
+```
 
-Until the `git push` step runs successfully, the upstream repository will not display the new commits.
+Make sure you understand:
+
+- which branch you are on
+- which files are modified or untracked
+- whether you are ahead of or behind the remote
+
+## 2. Run The Verified Checks
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run pack:check
+```
+
+These commands are the validated repo-level checks for this project.
+
+## 3. Commit The Intended Changes
+
+```bash
+git add .
+git commit -m "Describe the change"
+```
+
+If the worktree contains unrelated local changes, stage only the files you intend to publish.
+
+## 4. Push The Current Branch
+
+```bash
+git push --set-upstream origin <branch-name>
+```
+
+Replace `<branch-name>` with the branch you are currently using.
+
+## 5. Open A Pull Request
+
+Open a pull request from the pushed branch into the branch you want to merge into, usually `main`.
+
+## Notes
+
+- This repository may contain local-only work until you push it.
+- Always rely on `git status` and `git branch -vv` instead of old branch-specific notes.
+- `npm run pack:check` confirms that the publishable packages build and pack with real `dist/` outputs.

@@ -11,20 +11,9 @@
  */
 
 import { UnifiedAIMemoryMCPServer } from './unified-server.js';
-
-// Export the unified server as the main implementation
 export { UnifiedAIMemoryMCPServer as AIMemoryMCPServer };
 
-// Legacy class for backward compatibility
-class AIMemoryMCPServer extends UnifiedAIMemoryMCPServer {
-  constructor(config) {
-    super(config);
-  }
-
-}
-
-// CLI interface
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   const server = new UnifiedAIMemoryMCPServer();
 
   server.start().catch(error => {
@@ -38,5 +27,3 @@ if (require.main === module) {
     process.exit(0);
   });
 }
-
-export { UnifiedAIMemoryMCPServer as AIMemoryMCPServer };
